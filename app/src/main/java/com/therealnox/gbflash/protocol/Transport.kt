@@ -45,6 +45,9 @@ class Transport(
 
     fun write(byte: Int) = write(byteArrayOf(byte.toByte()))
 
+    /** Waits [ms] on the transport's clock (virtual in tests). */
+    fun sleep(ms: Long) = clock.sleep(ms)
+
     /**
      * Reads exactly [count] bytes. On a short read, discards pending input (spec 1.3 step 4) and
      * throws [ReadTimeoutException].

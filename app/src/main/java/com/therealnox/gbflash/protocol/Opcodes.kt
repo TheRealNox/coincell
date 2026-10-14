@@ -16,7 +16,8 @@ internal object Op {
 
     /**
      * Mapper register write only (`B2 <addr u32> <value u8>`). `DMG_CART_WRITE_SRAM` (`B3`) is
-     * deliberately NOT defined anywhere in this app yet: backups must never write cartridge SRAM.
+     * deliberately NOT defined here: it lives privately in `DmgCartWriteAccess`, which only the
+     * restore operation can reach, so backups cannot write cartridge SRAM.
      */
     const val DMG_CART_WRITE = 0xB2
     const val DMG_MBC_RESET = 0xB4

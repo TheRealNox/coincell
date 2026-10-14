@@ -90,6 +90,23 @@ class FakeFirmware(
     var b3Count = 0
         private set
 
+    /** Number of F2 (cart power on) commands. */
+    var powerOnCount = 0
+        private set
+
+    /** Fault injection for ROM (header) reads from the attached cartridge: bytes sent instead of the real ones. */
+    var romReadFilter: ((ByteArray) -> ByteArray)? = null
+
+    /** Every B3 request: (address, data as sent). */
+    val ramWrites = mutableListOf<Pair<Int, ByteArray>>()
+
+    /** The RAM read count when the first B3 arrived; null if no B3 was ever sent. */
+    var ramReadCountAtFirstB3: Int? = null
+        private set
+
+    /** Fault injection for B3: (1-based request number, address, data sent) -> bytes the cartridge actually receives. */
+    var ramWriteFilter: ((Int, Int, ByteArray) -> ByteArray)? = null
+
     /** Number of RAM-mode B1 reads served (address >= 0xA000). */
     var ramReadCount = 0
         private set
@@ -166,7 +183,7 @@ class FakeFirmware(
                     val v = vars[c[1].toInt() to u32(c, 2).toInt()] ?: 0L
                     reply(bytes((v shr 24).toInt(), (v shr 16).toInt(), (v shr 8).toInt(), v.toInt()))
                 }
-                0xF2 -> { consume(1); powered = true; voltageAtPowerOn += voltage; reply(1) }
+                0xF2 -> { consume(1); powered = true; powerOnCount++; voltageAtPowerOn += voltage; reply(1) }
                 0xF3 -> { consume(1); powered = false; reply(1) }
                 0xF4 -> { consume(1); reply(if (powered) 1 else 0) }
                 0xFE -> {
@@ -180,7 +197,24 @@ class FakeFirmware(
                     cart?.write(u32(c, 1).toInt(), c[5].toInt() and 0xFF)
                     reply(1)
                 }
-                0xB3 -> { consume(1); b3Count++; reply(1) }
+                0xB3 -> {
+                    // B3 is followed by TRANSFER_SIZE data bytes in a second write (spec 3.1).
+                    val n = (vars[2 to 0] ?: 0L).toInt()
+                    if (!need(1 + n)) return
+                    consume(1)
+                    var data = consume(n)
+                    b3Count++
+                    if (ramReadCountAtFirstB3 == null) ramReadCountAtFirstB3 = ramReadCount
+                    val mode = vars[1 to 1] ?: 0L
+                    val writeCs = vars[1 to 9] ?: 0L
+                    if (mode != 4L || writeCs != 1L) violations += "RAM write at 0x%X with mode $mode, write CS pulse $writeCs".format(address)
+                    if (address < 0xA000 || address + n > 0xC000) violations += "RAM write outside 0xA000-0xBFFF at 0x%X+$n".format(address)
+                    ramWrites += address to data.copyOf()
+                    data = ramWriteFilter?.invoke(ramWrites.size, address, data) ?: data
+                    cart?.let { c -> data.forEachIndexed { i, b -> c.write(address + i, b.toInt() and 0xFF) } }
+                    address += n
+                    reply(1)
+                }
                 0xA9 -> {
                     if (!need(5)) return
                     consume(5)
@@ -197,6 +231,7 @@ class FakeFirmware(
                     if (ram && (mode != 3L || readCs != 1L)) violations += "RAM read at 0x%X with mode $mode, read CS pulse $readCs".format(address)
                     if (!ram && mode != 1L) violations += "ROM read at 0x%X with access mode $mode".format(address)
                     var data = ByteArray(n) { c.read(address + it).toByte() }
+                    if (!ram) data = romReadFilter?.invoke(data) ?: data
                     if (ram) {
                         ramReadCount++
                         data = ramReadFilter?.invoke(ramReadCount, address, data) ?: data

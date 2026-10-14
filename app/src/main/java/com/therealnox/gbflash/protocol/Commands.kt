@@ -13,6 +13,7 @@ internal class Commands(
     private val transport: Transport,
     val firmware: FirmwareInfo,
     private val random: Random = Random.Default,
+    private val log: (String) -> Unit = {},
 ) {
     /** Platform the firmware is currently configured for, or null if none selected yet. */
     var platform: CartPlatform? = null
@@ -127,6 +128,9 @@ internal class Commands(
     /** Restricted cartridge access for save backups (no SRAM writes possible). */
     internal fun dmgCartAccess() = DmgCartAccess(this, transport)
 
+    /** The SRAM write path. Only [DeviceSession.restoreDmgSave] may call this. */
+    internal fun dmgCartWriter() = DmgCartWriteAccess(this, transport)
+
     // ---- header ------------------------------------------------------------------------------
 
     /**
@@ -155,6 +159,21 @@ internal class Commands(
         if (!header.logoValid && !header.likelyNoCart) {
             // Spec 5.2: logo invalid -> re-read once with 0x280 bytes and re-parse.
             header = DmgHeader.parse(readRom(CartPlatform.GB_GBC, 0x280))
+        }
+        if (!header.logoValid || !header.headerChecksumValid) {
+            // A cartridge swapped while still powered often reads garbage once. Power-cycle and retry once.
+            log("Header invalid, power-cycling cartridge and retrying")
+            transport.writeAck(Op.SET_ADDR_AS_INPUTS)
+            cartPowerOff()
+            transport.sleep(POWER_CYCLE_WAIT_MS)
+            cartPowerOn() // mode opcode, power on, mapper reset
+            transport.writeAck(Op.DISABLE_PULLUPS)
+            transport.writeAck(CartPlatform.GB_GBC.voltageOpcode)
+            transport.writeAck(Op.DMG_MBC_RESET)
+            setVar(FwVar.DMG_READ_CS_PULSE, 0)
+            setVar(FwVar.DMG_WRITE_CS_PULSE, 0)
+            header = DmgHeader.parse(readRom(CartPlatform.GB_GBC, HEADER_LEN))
+            if (!header.logoValid && !header.likelyNoCart) header = DmgHeader.parse(readRom(CartPlatform.GB_GBC, 0x280))
         }
         transport.writeAck(Op.SET_ADDR_AS_INPUTS)
         return header
@@ -201,6 +220,7 @@ internal class Commands(
 
     companion object {
         const val HEADER_LEN = 0x180
+        private const val POWER_CYCLE_WAIT_MS = 300L
         private const val ROM_CHUNK = 64
         private const val SAVE_CHUNK = 0x1000
         const val SAVE_WINDOW = 0x10000

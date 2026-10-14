@@ -34,14 +34,25 @@ class FakeDmgCart(
     /** Any write that landed in 0xA000-0xBFFF; must stay empty during a backup. */
     val sramWriteAttempts = mutableListOf<Pair<Int, Int>>()
 
+    /** Data writes into the selected RTC register (register 8..12, value), in order. */
+    val rtcWrites = mutableListOf<Pair<Int, Int>>()
+
     val rtcSelected: Int get() = rtcSelect
 
     fun write(addr: Int, v: Int) {
         if (addr >= 0xA000) {
             sramWriteAttempts += addr to v
-            if (ramEnabled && mapper != FakeMapper.MBC2) {
-                val i = ramIndex(addr)
-                if (i in sram.indices) sram[i] = v.toByte()
+            if (!(ramEnabled || ramEnabledAlways)) return
+            when {
+                mapper == FakeMapper.MBC2 -> sram[(addr - 0xA000) and 0x1FF] = (v and 0x0F).toByte() // 4 bit RAM
+                mapper == FakeMapper.MBC3 && rtcSelect in 8..12 -> if (hasRtc) {
+                    liveRtc[rtcSelect - 8] = v
+                    rtcWrites += rtcSelect to v
+                }
+                else -> {
+                    val i = ramIndex(addr)
+                    if (i in sram.indices) sram[i] = v.toByte()
+                }
             }
             return
         }

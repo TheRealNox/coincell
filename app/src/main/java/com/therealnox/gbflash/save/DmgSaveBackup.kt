@@ -64,7 +64,12 @@ class DmgBackupResult internal constructor(
 class BackupCancelledException : RuntimeException("Backup cancelled")
 
 /** Two reads of a chunk kept disagreeing (or kept coming back short). */
-class VerificationFailedException(message: String) : ProtocolException(message)
+class VerificationFailedException(
+    message: String,
+    /** RAM bank and offset of the chunk that could not be verified, or -1 if unknown. */
+    val bank: Int = -1,
+    val offset: Int = -1,
+) : ProtocolException(message)
 
 /**
  * DMG save backup (spec 6.1 - 6.5, 6.8 "verify read"): everything is read into memory, each chunk
@@ -82,11 +87,18 @@ internal class DmgSaveBackup(
         plan: BackupPlan.Ready,
         isCancelled: () -> Boolean,
         onProgress: (done: Long, total: Long) -> Unit,
+        /** False: the user declined the RTC; no probe and no clock read (MBC3 only). */
+        includeRtc: Boolean = true,
+        /**
+         * For an MBC3 whose header declares no timer: the RTC is probed before the RAM read and, if a clock
+         * answers, this is asked (blocking) before anything else happens. Null: old behaviour, store it.
+         */
+        askRtc: (() -> Boolean)? = null,
     ): DmgBackupResult {
         prepare()
         val warnings = mutableListOf<String>()
         val result = try {
-            collect(plan, isCancelled, onProgress, warnings)
+            collect(plan, isCancelled, onProgress, warnings, includeRtc, askRtc)
         } catch (t: Throwable) {
             cleanup(plan.mapper, t)?.let { t.addSuppressed(it) }
             throw t
@@ -104,31 +116,26 @@ internal class DmgSaveBackup(
         isCancelled: () -> Boolean,
         onProgress: (Long, Long) -> Unit,
         warnings: MutableList<String>,
+        includeRtc: Boolean,
+        askRtc: (() -> Boolean)?,
     ): Collected {
         val mapper = plan.mapper
-        val out = ByteArray(plan.saveSize)
-        val total = plan.saveSize.toLong() * 2
-        var done = 0L
-        onProgress(0, total)
-        mapper.enableRam(io)
-        val banks = (plan.saveSize + BANK - 1) / BANK
-        for (bank in 0 until banks) {
-            mapper.selectRamBank(io, bank)
-            val bankEnd = minOf(plan.saveSize - bank * BANK, BANK)
-            for (pos in 0 until bankEnd step CHUNK) {
-                val len = minOf(CHUNK, bankEnd - pos)
-                val chunk = readVerified(mapper, bank, pos, len, done, total, isCancelled, onProgress)
-                chunk.copyInto(out, bank * BANK + pos)
-                done += len * 2L
-                onProgress(done, total)
-            }
+        var earlyProbe: Boolean? = null
+        var wantRtc = includeRtc
+        if (mapper == DmgMapper.MBC3 && includeRtc && !plan.rtcDeclared && askRtc != null) {
+            earlyProbe = Mbc3Rtc.probePresent(io)
+            log("RTC probe: ${if (earlyProbe) "present" else "absent"}, header declares timer: false")
+            wantRtc = earlyProbe && askRtc()
         }
+        mapper.enableRam(io)
+        val out = VerifiedRamReader(io, log, "Nothing was saved. Check the cartridge contacts and try again.")
+            .readSave(mapper, plan.saveSize, isCancelled, onProgress)
         var rtc: RtcSnapshot? = null
-        var probe: Boolean? = null
-        if (mapper == DmgMapper.MBC3) {
+        var probe: Boolean? = earlyProbe
+        if (mapper == DmgMapper.MBC3 && wantRtc) {
             if (isCancelled()) throw BackupCancelledException()
-            probe = Mbc3Rtc.probePresent(io)
-            log("RTC probe: ${if (probe) "present" else "absent"}, header declares timer: ${plan.rtcDeclared}")
+            probe = earlyProbe ?: Mbc3Rtc.probePresent(io)
+            if (earlyProbe == null) log("RTC probe: ${if (probe) "present" else "absent"}, header declares timer: ${plan.rtcDeclared}")
             if (probe || plan.rtcDeclared) {
                 rtc = try {
                     Mbc3Rtc.read(io, nowSeconds())
@@ -139,43 +146,6 @@ internal class DmgSaveBackup(
             }
         }
         return Collected(out, rtc, probe)
-    }
-
-    /** Reads one chunk twice with full setup each time; retries a few times, then fails (spec 8.5 fixed). */
-    private fun readVerified(
-        mapper: DmgMapper,
-        bank: Int,
-        pos: Int,
-        len: Int,
-        doneBefore: Long,
-        total: Long,
-        isCancelled: () -> Boolean,
-        onProgress: (Long, Long) -> Unit,
-    ): ByteArray {
-        var problem = ""
-        repeat(MAX_ATTEMPTS) { attempt ->
-            if (isCancelled()) throw BackupCancelledException()
-            try {
-                val first = normalise(mapper, io.ramRead(pos, len))
-                onProgress(doneBefore + len, total)
-                val second = normalise(mapper, io.ramRead(pos, len))
-                onProgress(doneBefore + len * 2L, total)
-                if (first.contentEquals(second)) return first
-                problem = "two reads of the same data differed"
-            } catch (e: ReadTimeoutException) {
-                problem = "short or missing reply"
-            }
-            log("Chunk bank $bank +0x%X: $problem (attempt ${attempt + 1}/$MAX_ATTEMPTS)".format(pos))
-        }
-        throw VerificationFailedException(
-            "Verification failed at RAM bank $bank offset 0x%04X after $MAX_ATTEMPTS attempts: $problem. Nothing was saved. Check the cartridge contacts and try again."
-                .format(pos),
-        )
-    }
-
-    private fun normalise(mapper: DmgMapper, data: ByteArray): ByteArray {
-        if (!mapper.nibbleOnly) return data
-        return ByteArray(data.size) { (data[it].toInt() and 0x0F).toByte() } // upper nibble is open bus
     }
 
     /** Spec 6.1.5: bank 0, RAM off, read pulse off, address lines to inputs. Returns the first failure. */
@@ -198,8 +168,8 @@ internal class DmgSaveBackup(
     }
 
     companion object {
-        const val BANK = 0x2000
-        const val CHUNK = 0x200
-        const val MAX_ATTEMPTS = 4
+        const val BANK = VerifiedRamReader.BANK
+        const val CHUNK = VerifiedRamReader.CHUNK
+        const val MAX_ATTEMPTS = VerifiedRamReader.MAX_ATTEMPTS
     }
 }

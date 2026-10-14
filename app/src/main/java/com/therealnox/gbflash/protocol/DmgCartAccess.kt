@@ -4,7 +4,8 @@ import com.therealnox.gbflash.cart.DmgCartIo
 
 /**
  * Save-backup view of a powered DMG cartridge: register writes (below 0x8000 only), clock toggles
- * and RAM reads. There is intentionally no SRAM write path (no `B3`), see [Op.DMG_CART_WRITE].
+ * and RAM reads. There is intentionally no SRAM write path (no `B3`): that is `DmgCartWriteAccess`,
+ * which this class neither extends nor can reach.
  */
 internal class DmgCartAccess(
     private val commands: Commands,

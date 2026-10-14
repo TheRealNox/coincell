@@ -51,6 +51,7 @@ import com.therealnox.gbflash.cart.CartHeader
 import com.therealnox.gbflash.cart.DmgHeader
 import com.therealnox.gbflash.cart.hexDump
 import com.therealnox.gbflash.library.BackupEntry
+import com.therealnox.gbflash.library.BackupKind
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -81,11 +82,21 @@ fun MainScreen(vm: MainViewModel) {
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         vm.exportTo(uri)
     }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> vm.importSav(uri) }
     val startExport: (BackupEntry, Boolean) -> Unit = { entry, withRtc ->
         vm.beginExport(entry, withRtc)
         exportLauncher.launch(vm.exportFileName())
     }
     MaterialTheme(colorScheme = appColorScheme()) {
+        state.rtcPrompt?.let { prompt ->
+            AlertDialog(
+                onDismissRequest = { if (prompt.beforeStart) vm.dismissRtcPrompt() },
+                title = { Text("Real Time Clock") },
+                text = { Text("A Real Time Clock cartridge was detected. Do you want the cartridge's RTC register values also to be saved?") },
+                confirmButton = { TextButton(onClick = { vm.answerRtcPrompt(true) }) { Text("Yes") } },
+                dismissButton = { TextButton(onClick = { vm.answerRtcPrompt(false) }) { Text("No") } },
+            )
+        }
         exportChoice?.let { entry ->
             AlertDialog(
                 onDismissRequest = { exportChoice = null },
@@ -122,6 +133,10 @@ fun MainScreen(vm: MainViewModel) {
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (state.restore != null) {
+                    RestoreFlow(state, vm)
+                    return@Column
+                }
                 ConnectionCard(state, onConnect = vm::refresh, onDisconnect = vm::disconnect)
                 state.firmware?.let { FirmwareCard(it) }
                 if (state.status == ConnectionStatus.CONNECTED) {
@@ -137,10 +152,12 @@ fun MainScreen(vm: MainViewModel) {
                 if (state.status == ConnectionStatus.CONNECTED && state.headerPlatform == CartPlatform.GB_GBC) {
                     BackupCard(
                         state, vm,
+                        onRestore = vm::startRestore,
                         onExport = { e -> if (e.rtcIncluded) exportChoice = e else startExport(e, false) },
                         onDelete = { deleteChoice = it },
                     )
                 }
+                ImportCard(state, onImport = { if (vm.requestImport()) importLauncher.launch(arrayOf("*/*")) })
                 state.agbSaveHint?.let { InfoCard("GBA save window (read-only probe)", it) }
                 state.header?.let { h ->
                     Collapsible("Raw header hex (${h.raw.size} bytes)") { Mono(h.raw.hexDump()) }
@@ -217,6 +234,18 @@ private fun PlatformCard(state: UiState, vm: MainViewModel) {
             Button(onClick = vm::readHeader, enabled = state.platform != null && !state.busy) {
                 Text(if (state.busy) "Working..." else "Read header")
             }
+            if (state.cartPowered) {
+                Button(
+                    onClick = { vm.powerOffCart() },
+                    enabled = !state.busy,
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiary,
+                        contentColor = MaterialTheme.colorScheme.onTertiary,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Power off cart (before swapping)") }
+                Text("The cartridge stays powered after a read, backup or restore. Power it off before removing it.", style = MaterialTheme.typography.bodySmall)
+            }
             if (state.platform == CartPlatform.GBA) {
                 OutlinedButton(onClick = vm::probeAgbSave, enabled = !state.busy) { Text("Probe GBA save window (read-only)") }
             }
@@ -228,7 +257,13 @@ private fun formatTime(millis: Long): String =
     SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(millis))
 
 @Composable
-private fun BackupCard(state: UiState, vm: MainViewModel, onExport: (BackupEntry) -> Unit, onDelete: (BackupEntry) -> Unit) {
+private fun BackupCard(
+    state: UiState,
+    vm: MainViewModel,
+    onRestore: (BackupEntry) -> Unit,
+    onExport: (BackupEntry) -> Unit,
+    onDelete: (BackupEntry) -> Unit,
+) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Save backup", style = MaterialTheme.typography.titleMedium)
@@ -248,7 +283,36 @@ private fun BackupCard(state: UiState, vm: MainViewModel, onExport: (BackupEntry
             state.lastBackup?.let { SummaryBlock(it, state.lastBackupWarnings) }
             Text("Backups for this game", style = MaterialTheme.typography.titleSmall)
             if (state.backups.isEmpty()) Text("No backups yet.")
-            state.backups.forEach { e -> BackupRow(e, enabled = !state.busy, onExport = { onExport(e) }, onDelete = { onDelete(e) }) }
+            state.backups.forEach { e ->
+                BackupRow(e, enabled = !state.busy, canRestore = state.restoreAvailable, onRestore = { onRestore(e) }, onExport = { onExport(e) }, onDelete = { onDelete(e) })
+            }
+            if (state.otherCartridgeBackups.isNotEmpty()) {
+                Text("Backups of other cartridges of this game", style = MaterialTheme.typography.titleSmall)
+                Text("Same title, different cartridge checksum (for example a second copy). Restoring one of these shows a notice in the review.")
+                state.otherCartridgeBackups.forEach { e ->
+                    BackupRow(e, enabled = !state.busy, canRestore = state.restoreAvailable, onRestore = { onRestore(e) }, onExport = { onExport(e) }, onDelete = { onDelete(e) })
+                }
+            }
+            if (!state.restoreAvailable && (state.backups.isNotEmpty() || state.otherCartridgeBackups.isNotEmpty())) {
+                Text(
+                    "Restore to cartridge needs the reader connected in GB / GBC mode with a header read just now.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImportCard(state: UiState, onImport: () -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Import a .sav file", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Adds a save edited in PKHeX, or exported from an emulator or FlashGBX, to the library as an \"Imported\" entry of the game in the inserted cartridge. " +
+                    "It can then be restored like any backup. Nothing is written to the cartridge by importing.",
+            )
+            OutlinedButton(onClick = onImport, enabled = !state.busy) { Text("Import .sav...") }
         }
     }
 }
@@ -271,17 +335,28 @@ private fun SummaryBlock(e: BackupEntry, warnings: List<String>) {
 }
 
 @Composable
-private fun BackupRow(e: BackupEntry, enabled: Boolean, onExport: () -> Unit, onDelete: () -> Unit) {
+private fun BackupRow(
+    e: BackupEntry,
+    enabled: Boolean,
+    canRestore: Boolean,
+    onRestore: () -> Unit,
+    onExport: () -> Unit,
+    onDelete: () -> Unit,
+) {
     Column(Modifier.fillMaxWidth()) {
         Text(
             buildString {
                 append(formatTime(e.timestampMillis))
                 append("  ${e.size} B  CRC32 %08X".format(e.crc32))
+                if (e.kind != BackupKind.BACKUP) append("  [${e.kind.label}]")
+                if (!e.verified) append("  [unverified]")
                 if (e.rtcIncluded) append("  [RTC]")
                 if (e.suspect) append("  [suspect]")
             },
         )
+        if (e.note.isNotEmpty()) Text(e.note, style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = onRestore, enabled = enabled && canRestore) { Text("Restore to cartridge") }
             TextButton(onClick = onExport, enabled = enabled) { Text("Export .sav") }
             TextButton(onClick = onDelete, enabled = enabled) { Text("Delete") }
         }

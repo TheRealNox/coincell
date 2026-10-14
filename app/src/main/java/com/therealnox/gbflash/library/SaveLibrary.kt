@@ -1,6 +1,7 @@
 package com.therealnox.gbflash.library
 
 import com.therealnox.gbflash.cart.RtcSnapshot
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -12,6 +13,18 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.zip.CRC32
+
+/** Where a library entry came from. A missing `kind` in `backup.json` (milestone 2 entries) means [BACKUP]. */
+enum class BackupKind(val json: String, val label: String) {
+    BACKUP("backup", "Backup"),
+    PRE_RESTORE("pre-restore", "Pre-restore copy"),
+    IMPORTED("imported", "Imported"),
+    ;
+
+    companion object {
+        fun fromJson(value: String?): BackupKind = entries.firstOrNull { it.json == value } ?: BACKUP
+    }
+}
 
 /** What the app knows about a backup when it stores it. */
 class NewBackup(
@@ -26,6 +39,21 @@ class NewBackup(
     /** All 0xFF / all 0x00 and similar: stored anyway, but flagged. */
     val suspectReason: String?,
     val note: String = "",
+    val kind: BackupKind = BackupKind.BACKUP,
+    /** Name of the imported file (kind [BackupKind.IMPORTED]). */
+    val originalFileName: String? = null,
+)
+
+/** One line of `restores.json`: what a restore attempt did to a cartridge. */
+class RestoreRecord(
+    val timestampMillis: Long,
+    val sourceBackupId: String,
+    /** Id of the pre-restore copy (or the entry that provably equalled the cartridge), null if none was taken. */
+    val safetyCopyId: String?,
+    /** verified, verify-failed, failed, cancelled-partial, aborted-nothing-written */
+    val outcome: String,
+    val crc32: Long?,
+    val detail: String,
 )
 
 /** One stored backup (read back from `backup.json`). */
@@ -43,6 +71,8 @@ class BackupEntry(
     val verified: Boolean,
     val suspectReason: String?,
     val note: String,
+    val kind: BackupKind = BackupKind.BACKUP,
+    val originalFileName: String? = null,
 ) {
     val rtcIncluded: Boolean get() = rtc != null
     val suspect: Boolean get() = suspectReason != null
@@ -90,12 +120,87 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
         return dirs.mapNotNull { readEntry(it, gameKey) }.sortedWith(compareByDescending<BackupEntry> { it.timestampMillis }.thenByDescending { it.id })
     }
 
+    /**
+     * Backups of other cartridges of the same game as [game]: same platform and cleaned title but a
+     * different key (global checksum). These can be restored to [game]'s cartridge with a notice.
+     */
+    @Synchronized
+    fun listOtherCartridges(game: GameInfo): List<BackupEntry> {
+        val want = GameInfo.sanitizeTitle(game.title)
+        val keys = (root.listFiles { f -> f.isDirectory && !f.name.startsWith(".") } ?: emptyArray()).map { it.name }
+        return keys.filter { it != game.key && SAFE.matches(it) }.flatMap { key ->
+            val other = readGame(key)
+            if (other != null && other.platform == game.platform && GameInfo.sanitizeTitle(other.title) == want) list(key) else emptyList()
+        }.sortedByDescending { it.timestampMillis }
+    }
+
     /** All games with their `game.json` (for the future library screen). */
     @Synchronized
     fun games(): List<JSONObject> =
         (root.listFiles { f -> f.isDirectory } ?: emptyArray())
             .mapNotNull { runCatching { JSONObject(File(it, GAME_JSON).readText()) }.getOrNull() }
             .sortedByDescending { it.optLong("lastSeen") }
+
+    /** The stored `game.json` of [gameKey], or null if it is missing or unreadable. */
+    @Synchronized
+    fun readGame(gameKey: String): GameInfo? = try {
+        require(SAFE.matches(gameKey))
+        val j = JSONObject(File(File(root, gameKey), GAME_JSON).readText())
+        GameInfo(
+            platform = j.getString("platform"),
+            title = j.getString("title"),
+            key = j.getString("key"),
+            cartType = j.optString("cartType"),
+            romSize = if (j.isNull("romSize")) null else j.getLong("romSize"),
+            globalChecksum = j.getString("globalChecksum").toInt(16),
+            headerChecksum = j.getString("headerChecksum").toInt(16),
+            gameCode = if (j.isNull("gameCode")) null else j.getString("gameCode"),
+        )
+    } catch (_: Exception) {
+        null
+    }
+
+    /** Appends to `<gameKey>/restores.json` (temp file + rename). */
+    @Synchronized
+    fun addRestoreRecord(gameKey: String, record: RestoreRecord) {
+        require(SAFE.matches(gameKey)) { "Unsafe game key" }
+        val dir = File(root, gameKey)
+        if (!dir.isDirectory && !dir.mkdirs()) throw IOException("Cannot create $dir")
+        val arr = JSONArray()
+        restoreRecords(gameKey).forEach { arr.put(recordJson(it)) }
+        arr.put(recordJson(record))
+        val tmp = File(dir, "$TEMP_PREFIX$RESTORES_JSON")
+        writeFile(tmp, JSONObject().put("version", 1).put("restores", arr).toString(2).toByteArray())
+        moveAtomic(tmp, File(dir, RESTORES_JSON))
+    }
+
+    /** The restore records of [gameKey], oldest first. */
+    @Synchronized
+    fun restoreRecords(gameKey: String): List<RestoreRecord> = try {
+        require(SAFE.matches(gameKey))
+        val arr = JSONObject(File(File(root, gameKey), RESTORES_JSON).readText()).getJSONArray("restores")
+        (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            RestoreRecord(
+                timestampMillis = o.getLong("timestamp"),
+                sourceBackupId = o.getString("sourceBackupId"),
+                safetyCopyId = if (o.isNull("safetyCopyId")) null else o.getString("safetyCopyId"),
+                outcome = o.getString("outcome"),
+                crc32 = if (o.isNull("crc32")) null else o.getString("crc32").toLong(16),
+                detail = o.optString("detail"),
+            )
+        }
+    } catch (_: Exception) {
+        emptyList()
+    }
+
+    private fun recordJson(r: RestoreRecord): JSONObject = JSONObject()
+        .put("timestamp", r.timestampMillis)
+        .put("sourceBackupId", r.sourceBackupId)
+        .put("safetyCopyId", r.safetyCopyId ?: JSONObject.NULL)
+        .put("outcome", r.outcome)
+        .put("crc32", r.crc32?.let { "%08X".format(it) } ?: JSONObject.NULL)
+        .put("detail", r.detail)
 
     /** `save.sav`, checked against the stored CRC32. */
     @Synchronized
@@ -182,6 +287,8 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
             .put("firmware", b.firmware)
             .put("appVersion", b.appVersion)
             .put("note", b.note)
+            .put("kind", b.kind.json)
+        b.originalFileName?.let { o.put("originalFileName", it) }
         if (rtc != null) {
             o.put(
                 "rtc",
@@ -216,6 +323,8 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
                 verified = json.optBoolean("verified"),
                 suspectReason = if (json.optBoolean("suspect")) json.optString("suspectReason", "suspect") else null,
                 note = json.optString("note"),
+                kind = BackupKind.fromJson(json.optString("kind", "").ifEmpty { null }),
+                originalFileName = if (json.has("originalFileName")) json.optString("originalFileName") else null,
             )
         }
     } catch (_: Exception) {
@@ -242,6 +351,7 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
         const val RTC_FILE = "rtc.bin"
         const val BACKUP_JSON = "backup.json"
         const val GAME_JSON = "game.json"
+        const val RESTORES_JSON = "restores.json"
         private const val TEMP_PREFIX = ".tmp-"
         private val SAFE = Regex("[A-Za-z0-9_-]+")
 
