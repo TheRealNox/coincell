@@ -71,6 +71,8 @@ import com.therealnox.gbflash.device.DeviceState
 import com.therealnox.gbflash.device.RestoreUi
 import com.therealnox.gbflash.library.BackupEntry
 import com.therealnox.gbflash.library.BackupKind
+import com.therealnox.gbflash.library.LibraryState
+import com.therealnox.gbflash.ui.LocalShell
 import com.therealnox.gbflash.restore.RestoreMatch
 import com.therealnox.gbflash.restore.RestorePolicy
 import com.therealnox.gbflash.restore.RestoreResult
@@ -115,7 +117,7 @@ fun RestoreFlow(state: DeviceState, vm: DeviceController) {
         Stepper(ui, flash = ui.isFlash())
         when (ui) {
             RestoreUi.Loading -> LoadingStep()
-            is RestoreUi.Review -> ReviewStep(ui, vm)
+            is RestoreUi.Review -> ReviewStep(ui, vm, state)
             is RestoreUi.SafetyCopyRunning -> SafetyCopyStep(ui, vm)
             is RestoreUi.Stopped -> StoppedStep(ui, vm)
             is RestoreUi.Confirm -> ConfirmStep(ui, vm)
@@ -158,13 +160,20 @@ private fun Stepper(ui: RestoreUi, flash: Boolean) {
 // ---- review ------------------------------------------------------------------------------------
 
 @Composable
-private fun ReviewStep(ui: RestoreUi.Review, vm: DeviceController) {
+private fun ReviewStep(ui: RestoreUi.Review, vm: DeviceController, state: DeviceState) {
     val r = ui.review
     val h = r.header
+    // Friendly labels (custom name, GBA database name). Identity and matching below stay on the header data.
+    val library by LocalShell.current.store.state.collectAsState()
+    val games = (library as? LibraryState.Loaded)?.games.orEmpty()
+    val cartInfo = r.cartGame.copy(databaseName = r.cartGame.databaseName ?: state.agbSave?.detection?.dbName)
+        .withNameFrom(games.firstOrNull { it.key == r.cartGame.key }?.game)
+    val cartLabel = if (h.title.isEmpty() && cartInfo.label == "(untitled)") "(empty title)" else cartInfo.label
     Section("On the cartridge now")
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(h.title.ifEmpty { "(empty title)" }, style = MaterialTheme.typography.titleMedium)
+            Text(cartLabel, style = MaterialTheme.typography.titleMedium)
+            if (cartLabel != h.title) Text("Cartridge title: ${h.title.ifEmpty { "(empty title)" }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             when (h) {
                 is DmgHeader -> {
                     Text("GB / GBC, ${h.mapperName}")
@@ -238,7 +247,9 @@ private fun Section(text: String) {
 private fun EntryCard(e: BackupEntry, r: RestoreReview?) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(r?.sourceGame?.title?.ifEmpty { "(empty title)" } ?: e.gameKey, style = MaterialTheme.typography.titleMedium)
+            val src = r?.sourceGame
+            Text(src?.label ?: e.gameKey, style = MaterialTheme.typography.titleMedium)
+            src?.secondaryTitle?.let { Text("Cartridge title: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             Text("${formatTime(e.timestampMillis)}   [${e.kind.label}]")
             Text("${RestorePolicy.formatSize(e.size)}   CRC32 %08X".format(e.crc32))
             if (e.kind == BackupKind.IMPORTED) {

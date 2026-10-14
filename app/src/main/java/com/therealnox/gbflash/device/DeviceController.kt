@@ -226,7 +226,7 @@ class DeviceController(
                     agbPlan = p
                     available = p is AgbBackupPlan.Ready
                     reason = (p as? AgbBackupPlan.Unavailable)?.reason
-                    cartGame = GameInfo.fromAgb(header).also { game = it }
+                    cartGame = GameInfo.fromAgb(header, databaseName = detection.dbName).also { game = it }
                 }
                 _state.update {
                     it.copy(
@@ -421,6 +421,11 @@ class DeviceController(
         if (!prompt.beforeStart) rtcAnswer?.complete(false)
     }
 
+    /** The friendly label of [g]: the custom name stored in the library, else [GameInfo.defaultLabel]. */
+    private fun labelOf(g: GameInfo): String = g.withNameFrom(runCatching { library.readGame(g.key) }.getOrNull()).label
+
+    private fun GameInfo.secondaryTitleFor(label: String): String? = title.trim().takeIf { it.isNotEmpty() && it != label }
+
     private fun runBackup(includeRtc: Boolean) {
         val s = session ?: return
         val st = _state.value
@@ -428,9 +433,9 @@ class DeviceController(
         val g = game ?: return
         if (st.busy || st.restore != null || st.platform != CartPlatform.GB_GBC || st.headerPlatform != CartPlatform.GB_GBC) return
         cancelRequested.set(false)
-        val title = g.title.ifBlank { "cartridge" }
+        val title = labelOf(g)
         _state.update {
-            it.copy(busy = true, busyLabel = "Backing up", error = null, info = null, backup = BackupUi.Running(title, 0L to p.saveSize * 2L))
+            it.copy(busy = true, busyLabel = "Backing up", error = null, info = null, backup = BackupUi.Running(title, 0L to p.saveSize * 2L, g.secondaryTitleFor(title)))
         }
         scope.launch {
             var outcome: BackupUi = BackupUi.Cancelled
@@ -440,7 +445,7 @@ class DeviceController(
                     plan = p,
                     isCancelled = cancelRequested::get,
                     onProgress = { done, total ->
-                        _state.update { st2 -> if (st2.backup is BackupUi.Running) st2.copy(backup = BackupUi.Running(title, done to total)) else st2 }
+                        _state.update { st2 -> if (st2.backup is BackupUi.Running) st2.copy(backup = BackupUi.Running(title, done to total, g.secondaryTitleFor(title))) else st2 }
                     },
                     log = debugLog::add,
                     includeRtc = includeRtc,
@@ -465,7 +470,7 @@ class DeviceController(
                 }
                 debugLog.add("Backup stored: ${entry.id} CRC32 %08X".format(entry.crc32))
                 onLibraryChanged()
-                outcome = BackupUi.Result(entry, title, result.warnings)
+                outcome = BackupUi.Result(entry, title, result.warnings, g.secondaryTitleFor(title))
             } catch (e: BackupCancelledException) {
                 debugLog.add("Backup cancelled by user")
                 outcome = BackupUi.Cancelled
@@ -488,9 +493,9 @@ class DeviceController(
         val g = game ?: return
         if (st.busy || st.restore != null || st.platform != CartPlatform.GBA || st.headerPlatform != CartPlatform.GBA) return
         cancelRequested.set(false)
-        val title = g.title.ifBlank { "cartridge" }
+        val title = labelOf(g)
         _state.update {
-            it.copy(busy = true, busyLabel = "Backing up", error = null, info = null, backup = BackupUi.Running(title, 0L to p.saveSize * 2L))
+            it.copy(busy = true, busyLabel = "Backing up", error = null, info = null, backup = BackupUi.Running(title, 0L to p.saveSize * 2L, g.secondaryTitleFor(title)))
         }
         scope.launch {
             var outcome: BackupUi = BackupUi.Cancelled
@@ -500,7 +505,7 @@ class DeviceController(
                     plan = p,
                     isCancelled = cancelRequested::get,
                     onProgress = { done, total ->
-                        _state.update { st2 -> if (st2.backup is BackupUi.Running) st2.copy(backup = BackupUi.Running(title, done to total)) else st2 }
+                        _state.update { st2 -> if (st2.backup is BackupUi.Running) st2.copy(backup = BackupUi.Running(title, done to total, g.secondaryTitleFor(title))) else st2 }
                     },
                     log = debugLog::add,
                     askRtc = ::askRtcBlocking,
@@ -527,7 +532,7 @@ class DeviceController(
                 }
                 debugLog.add("Backup stored: ${entry.id} CRC32 %08X".format(entry.crc32))
                 onLibraryChanged()
-                outcome = BackupUi.Result(entry, title, result.warnings)
+                outcome = BackupUi.Result(entry, title, result.warnings, g.secondaryTitleFor(title))
             } catch (e: BackupCancelledException) {
                 debugLog.add("Backup cancelled by user")
                 outcome = BackupUi.Cancelled

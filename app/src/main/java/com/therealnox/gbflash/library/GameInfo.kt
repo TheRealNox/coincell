@@ -18,9 +18,44 @@ data class GameInfo(
     val globalChecksum: Int,
     val headerChecksum: Int,
     val gameCode: String?,
+    /**
+     * Optional friendly name chosen by the user (`displayName` in `game.json`). Purely cosmetic: never part of the
+     * key, the folder name or any restore matching rule.
+     */
+    val displayName: String? = null,
+    /** GBA: the FlashGBX database name seen when a backup was stored (`databaseName` in `game.json`), also usable offline. */
+    val databaseName: String? = null,
 ) {
+    /** The label without a custom name: the FlashGBX database name for GBA, otherwise the header title. */
+    val defaultLabel: String
+        get() = (if (platform == "AGB") databaseName?.trim()?.ifEmpty { null } else null) ?: title.ifBlank { "(untitled)" }
+
+    /** The one label shown everywhere: custom name, else [defaultLabel]. */
+    val label: String get() = displayName?.trim()?.ifEmpty { null } ?: defaultLabel
+
+    /** The cartridge header title when it differs from [label], to show as secondary text; null otherwise. */
+    val secondaryTitle: String? get() = title.trim().takeIf { it.isNotEmpty() && it != label }
+
+    /** What identifies the cartridge besides the title: global checksum for GB / GBC, game code + header checksum for GBA. */
+    val identityText: String
+        get() = if (platform == "AGB") {
+            (gameCode?.let { "Game code $it  ·  " } ?: "") + "Header checksum 0x%02X".format(headerChecksum and 0xFF)
+        } else {
+            "Checksum 0x%04X".format(globalChecksum and 0xFFFF)
+        }
+
+    /** This (cartridge) identity labelled with the custom name stored in the library, if [stored] has one. */
+    fun withNameFrom(stored: GameInfo?): GameInfo =
+        if (stored == null) this else copy(displayName = stored.displayName, databaseName = databaseName ?: stored.databaseName)
+
     companion object {
         const val MAX_TITLE_IN_KEY = 32
+
+        /** Longest custom name kept. */
+        const val NAME_MAX_LENGTH = 60
+
+        /** Trimmed and capped; null when nothing is left (meaning "not set"). */
+        fun normalizeName(name: String?): String? = name?.trim()?.take(NAME_MAX_LENGTH)?.trim()?.ifEmpty { null }
 
         /** `AGB_<TITLE>_<GAMECODE>_<header checksum hex>`, e.g. `AGB_POKEMON-SAPP_AXPF_5C`. */
         fun makeAgbKey(title: String, gameCode: String, headerChecksum: Int): String {
@@ -53,7 +88,7 @@ data class GameInfo(
          * Identity of a GBA cartridge: platform + cleaned title + game code + header checksum (0xBD). The header
          * checksum covers the version byte, so another revision is another key. `globalChecksum` is unused (0).
          */
-        fun fromAgb(h: AgbHeader, romSize: Long? = null): GameInfo = GameInfo(
+        fun fromAgb(h: AgbHeader, romSize: Long? = null, databaseName: String? = null): GameInfo = GameInfo(
             platform = "AGB",
             title = h.title,
             key = makeAgbKey(h.title, h.gameCode, h.headerChecksumStored),
@@ -62,6 +97,7 @@ data class GameInfo(
             globalChecksum = 0,
             headerChecksum = h.headerChecksumStored,
             gameCode = h.gameCode.ifEmpty { null },
+            databaseName = normalizeName(databaseName),
         )
     }
 }

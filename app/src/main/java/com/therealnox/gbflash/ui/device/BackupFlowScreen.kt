@@ -175,6 +175,7 @@ private fun RunningContent(b: BackupUi.Running, onCancel: () -> Unit) {
         }
     }
     Text(b.title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+    com.therealnox.gbflash.ui.components.HeaderTitleLine(b.headerTitle)
     Text(
         "Reading and verifying: every block is read twice.",
         style = MaterialTheme.typography.bodyMedium,
@@ -213,6 +214,7 @@ private fun ResultContent(
     )
     Text(if (e.suspect) "Stored, but it looks empty" else "Backup complete", style = MaterialTheme.typography.headlineMedium)
     Text(r.title, style = MaterialTheme.typography.titleLarge)
+    com.therealnox.gbflash.ui.components.HeaderTitleLine(r.headerTitle)
     Text(formatDateTime(e.timestampMillis), style = MaterialTheme.typography.bodyMedium)
     MonoText("${formatSizeKiB(e.size)}   CRC32 ${crcText(e.crc32)}")
     BackupChips(e)

@@ -21,6 +21,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Usb
@@ -55,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.text.KeyboardActions
+import com.therealnox.gbflash.library.GameInfo
 import com.therealnox.gbflash.library.GameSummary
 import com.therealnox.gbflash.library.LibrarySort
 import com.therealnox.gbflash.library.LibraryState
@@ -78,6 +81,7 @@ fun LibraryScreen(vm: LibraryViewModel, onOpenGame: (String) -> Unit, onGoDevice
     val ui by vm.ui.collectAsState()
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
+    val rename = rememberRenameGame()
     ScreenFrame(
         title = "Library",
         actions = {
@@ -111,7 +115,7 @@ fun LibraryScreen(vm: LibraryViewModel, onOpenGame: (String) -> Unit, onGoDevice
                 onValueChange = vm::setSearch,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).focusRequester(focus),
                 singleLine = true,
-                label = { Text("Search title or note") },
+                label = { Text("Search name, title, code or note") },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(),
             )
@@ -142,7 +146,7 @@ fun LibraryScreen(vm: LibraryViewModel, onOpenGame: (String) -> Unit, onGoDevice
             is LibraryState.Loaded -> when {
                 ui.total == 0 -> EmptyLibrary(onGoDevice)
                 ui.items.isEmpty() -> NoResults(vm::clearFilters)
-                else -> GameList(ui.items, ui.inReaderKey, onOpenGame)
+                else -> GameList(ui.items, ui.inReaderKey, onOpenGame, rename)
             }
         }
     }
@@ -198,7 +202,7 @@ private fun NoResults(onClear: () -> Unit) {
 }
 
 @Composable
-private fun GameList(items: List<GameSummary>, inReaderKey: String?, onOpenGame: (String) -> Unit) {
+private fun GameList(items: List<GameSummary>, inReaderKey: String?, onOpenGame: (String) -> Unit, onRename: (GameInfo) -> Unit) {
     // Same title with different checksums (revisions, regions, repro carts): show the checksum to tell them apart.
     val duplicateTitles = items.groupBy { it.game.title.uppercase() }.filterValues { it.size > 1 }.keys
     LazyColumn(
@@ -206,14 +210,15 @@ private fun GameList(items: List<GameSummary>, inReaderKey: String?, onOpenGame:
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items(items, key = { it.key }) { g ->
-            GameRow(g, inReader = g.key == inReaderKey, showChecksum = g.game.title.uppercase() in duplicateTitles, onClick = { onOpenGame(g.key) })
+            GameRow(g, inReader = g.key == inReaderKey, showChecksum = g.game.title.uppercase() in duplicateTitles, onClick = { onOpenGame(g.key) }, onRename = { onRename(g.game) })
         }
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun GameRow(g: GameSummary, inReader: Boolean, showChecksum: Boolean, onClick: () -> Unit) {
+private fun GameRow(g: GameSummary, inReader: Boolean, showChecksum: Boolean, onClick: () -> Unit, onRename: () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
     Card(
         onClick = onClick,
@@ -229,8 +234,11 @@ private fun GameRow(g: GameSummary, inReader: Boolean, showChecksum: Boolean, on
             PlatformBadge(g.platform)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(g.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                g.game.secondaryTitle?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = if (inReader) scheme.onPrimaryContainer else scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 Text(
-                    "Latest ${formatDateTime(g.latestMillis)}" + if (showChecksum) "  ·  checksum 0x%04X".format(g.game.globalChecksum) else "",
+                    "Latest ${formatDateTime(g.latestMillis)}" + if (showChecksum) "  ·  ${g.game.identityText}" else "",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (inReader) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
                 )
@@ -245,6 +253,18 @@ private fun GameRow(g: GameSummary, inReader: Boolean, showChecksum: Boolean, on
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.semantics { contentDescription = if (g.count == 1) "1 backup" else "${g.count} backups" },
             )
+            Column {
+                IconButton(onClick = { menu = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "More actions for ${g.title}")
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Rename") },
+                        leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                        onClick = { menu = false; onRename() },
+                    )
+                }
+            }
         }
     }
 }

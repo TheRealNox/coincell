@@ -22,7 +22,8 @@ val GameInfo.displayPlatform: DisplayPlatform
 /** One game of the library with its readable backups, newest first (never empty). */
 data class GameSummary(val game: GameInfo, val backups: List<BackupEntry>) {
     val key: String get() = game.key
-    val title: String get() = game.title.ifBlank { "(untitled)" }
+    /** The label shown everywhere ([GameInfo.label]). */
+    val title: String get() = game.label
     val count: Int get() = backups.size
     val latestMillis: Long get() = backups.maxOf { it.timestampMillis }
     val hasClock: Boolean get() = backups.any { it.rtcIncluded }
@@ -58,7 +59,11 @@ data class LibraryQuery(
     val isFiltering: Boolean get() = search.isNotBlank() || filter != PlatformFilter.ALL
 }
 
-/** Search (title, game code, notes), platform filter and sort. Pure, so it is unit tested. */
+/** Friendly name, database name, header title or game code contains [needle] (case-insensitive). */
+fun GameInfo.matches(needle: String): Boolean =
+    listOfNotNull(displayName, databaseName, title, gameCode).any { it.contains(needle, ignoreCase = true) }
+
+/** Search (friendly name, database name, title, game code, notes), platform filter and sort. Pure, so it is unit tested. */
 fun List<GameSummary>.applyQuery(query: LibraryQuery): List<GameSummary> {
     val needle = query.search.trim()
     val filtered = filter { g ->
@@ -70,8 +75,7 @@ fun List<GameSummary>.applyQuery(query: LibraryQuery): List<GameSummary> {
         }
         platformOk && (
             needle.isEmpty() ||
-                g.game.title.contains(needle, ignoreCase = true) ||
-                (g.game.gameCode?.contains(needle, ignoreCase = true) ?: false) ||
+                g.game.matches(needle) ||
                 g.backups.any { it.note.contains(needle, ignoreCase = true) }
             )
     }

@@ -57,6 +57,7 @@ import com.therealnox.gbflash.library.LibraryStore
 import com.therealnox.gbflash.ui.LocalShell
 import com.therealnox.gbflash.ui.ScreenFrame
 import com.therealnox.gbflash.ui.components.BackupChips
+import com.therealnox.gbflash.ui.components.HeaderTitleLine
 import com.therealnox.gbflash.ui.components.KeyValueRow
 import com.therealnox.gbflash.ui.components.MonoText
 import com.therealnox.gbflash.ui.components.NeutralChip
@@ -88,7 +89,16 @@ fun GameDetailScreen(
     // The last backup was deleted (or the game never existed): nothing left to show.
     LaunchedEffect(game == null && !ui.loading) { if (game == null && !ui.loading) onBack() }
     val actions = rememberBackupActions(game)
-    ScreenFrame(title = game?.title ?: "Game", onBack = onBack) {
+    val rename = rememberRenameGame()
+    ScreenFrame(
+        title = game?.title ?: "Game",
+        onBack = onBack,
+        actions = {
+            if (game != null) {
+                IconButton(onClick = { rename(game.game) }) { Icon(Icons.Filled.Edit, contentDescription = "Rename") }
+            }
+        },
+    ) {
         if (game == null) return@ScreenFrame
         LazyColumn(
             Modifier.fillMaxSize(),
@@ -129,8 +139,9 @@ private fun IdentityCard(game: GameSummary, ui: GameDetailUi, onBackupCart: () -
                 PlatformBadge(game.platform)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(game.title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    HeaderTitleLine(game.game.secondaryTitle)
                     Text(
-                        "Checksum 0x%04X  ·  ${game.game.cartType}".format(game.game.globalChecksum),
+                        "${game.game.identityText}  ·  ${game.game.cartType}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -256,7 +267,10 @@ fun BackupDetailScreen(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 PlatformBadge(game.platform)
-                Text(game.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Column(Modifier.weight(1f)) {
+                    Text(game.title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    HeaderTitleLine(game.game.secondaryTitle)
+                }
             }
             BackupChips(entry)
             entry.suspectReason?.let {

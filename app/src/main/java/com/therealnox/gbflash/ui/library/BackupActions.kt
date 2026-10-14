@@ -84,7 +84,7 @@ fun rememberBackupActions(game: GameSummary?, onDeleted: () -> Unit = {}): Backu
     }
     fun start(entry: BackupEntry, withRtc: Boolean) {
         pending = entry to withRtc
-        launcher.launch(exportName(game?.game?.title ?: "save", entry.timestampMillis))
+        launcher.launch(exportName(game?.game?.label ?: "save", entry.timestampMillis))
     }
 
     exportChoice?.let { entry ->

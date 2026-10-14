@@ -22,9 +22,9 @@ data class RtcPrompt(val beforeStart: Boolean)
 
 /** The backup flow screens (docs/UI_DESIGN.md 4.3). */
 sealed interface BackupUi {
-    data class Running(val title: String, val progress: Pair<Long, Long>) : BackupUi
+    data class Running(val title: String, val progress: Pair<Long, Long>, val headerTitle: String? = null) : BackupUi
 
-    data class Result(val entry: BackupEntry, val title: String, val warnings: List<String>) : BackupUi
+    data class Result(val entry: BackupEntry, val title: String, val warnings: List<String>, val headerTitle: String? = null) : BackupUi
 
     data class Failed(val message: String) : BackupUi
 

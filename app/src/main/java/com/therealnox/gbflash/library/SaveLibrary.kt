@@ -171,9 +171,37 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
             globalChecksum = j.getString("globalChecksum").toInt(16),
             headerChecksum = j.getString("headerChecksum").toInt(16),
             gameCode = if (j.isNull("gameCode")) null else j.getString("gameCode"),
+            displayName = optName(j, "displayName"),
+            databaseName = optName(j, "databaseName"),
         )
     } catch (_: Exception) {
         null
+    }
+
+    private fun optName(j: JSONObject, name: String): String? =
+        if (j.has(name) && !j.isNull(name)) GameInfo.normalizeName(j.optString(name)) else null
+
+    /**
+     * Sets (or, with a blank [name], clears) the custom name of [gameKey] and returns the re-read game. Only
+     * `game.json` is touched (temp file + atomic rename); key, folder and every other field stay as they are.
+     */
+    @Synchronized
+    fun setDisplayName(gameKey: String, name: String?): GameInfo {
+        require(SAFE.matches(gameKey)) { "Unsafe game key" }
+        val dir = File(root, gameKey)
+        val file = File(dir, GAME_JSON)
+        val json = JSONObject(file.readText())
+        val clean = GameInfo.normalizeName(name)
+        if (clean == null) json.remove("displayName") else json.put("displayName", clean)
+        val tmp = File(dir, "$TEMP_PREFIX$GAME_JSON")
+        try {
+            writeFile(tmp, json.toString(2).toByteArray())
+            moveAtomic(tmp, file)
+        } catch (e: Exception) {
+            tmp.delete()
+            throw e
+        }
+        return readGame(gameKey) ?: throw IOException("Updated game cannot be read back")
     }
 
     /** Appends to `<gameKey>/restores.json` (temp file + rename). */
@@ -291,7 +319,11 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
 
     private fun writeGameJson(gameDir: File, game: GameInfo, now: Long) {
         val file = File(gameDir, GAME_JSON)
-        val firstSeen = runCatching { JSONObject(file.readText()).getLong("firstSeen") }.getOrDefault(now)
+        val old = runCatching { JSONObject(file.readText()) }.getOrNull()
+        val firstSeen = runCatching { old!!.getLong("firstSeen") }.getOrDefault(now)
+        // The custom name is the user's: a new backup never overwrites it. The database name is kept when not known now.
+        val displayName = old?.let { optName(it, "displayName") }
+        val databaseName = game.databaseName ?: old?.let { optName(it, "databaseName") }
         val json = JSONObject()
             .put("version", 1)
             .put("key", game.key)
@@ -304,6 +336,8 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
             .put("gameCode", game.gameCode ?: JSONObject.NULL)
             .put("firstSeen", firstSeen)
             .put("lastSeen", now)
+        displayName?.let { json.put("displayName", it) }
+        databaseName?.let { json.put("databaseName", it) }
         val tmp = File(gameDir, "$TEMP_PREFIX$GAME_JSON")
         writeFile(tmp, json.toString(2).toByteArray())
         moveAtomic(tmp, file)

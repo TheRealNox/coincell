@@ -249,6 +249,8 @@ private fun CartridgeCard(
         }
     }
     val blank = header.likelyNoCart || !header.logoValid
+    // The custom name from the library (if any) and, for GBA, the database name: the same label as everywhere else.
+    val cartInfo = state.cartGame?.withNameFrom(inLibrary?.game)
 
     if (blank) {
         StatusCard(
@@ -264,7 +266,8 @@ private fun CartridgeCard(
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 CartridgeGlyph(platform, size = 72.dp)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(header.title.ifEmpty { "(no title)" }, style = MaterialTheme.typography.titleLarge)
+                    Text(cartInfo?.label ?: header.title.ifEmpty { "(no title)" }, style = MaterialTheme.typography.titleLarge)
+                    com.therealnox.gbflash.ui.components.HeaderTitleLine(cartInfo?.secondaryTitle)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         NeutralChip(platform.label, Icons.Filled.PowerSettingsNew)
                         state.headerPlatform?.let { StatusChip(it.voltsLabel, Icons.Filled.Bolt, MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer) }
@@ -297,7 +300,7 @@ private fun CartridgeCard(
             }
             if (inLibrary != null) {
                 TextButton(onClick = { onOpenGame(inLibrary.key) }, Modifier.heightIn(min = 48.dp)) {
-                    Text("In your library: ${inLibrary.count} ${if (inLibrary.count == 1) "backup" else "backups"}, latest ${formatDateShort(inLibrary.latestMillis)}")
+                    Text("In your library as \"${cartInfo?.label ?: inLibrary.title}\": ${inLibrary.count} ${if (inLibrary.count == 1) "backup" else "backups"}, latest ${formatDateShort(inLibrary.latestMillis)}")
                 }
             } else if (state.backupAvailable) {
                 Text("Not in your library yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

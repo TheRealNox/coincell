@@ -93,6 +93,13 @@ class LibraryStore(
         return updated
     }
 
+    /** Sets or (blank [name]) clears the friendly name of [gameKey]; returns the updated game. */
+    suspend fun renameGame(gameKey: String, name: String?): GameInfo {
+        val updated = withContext(io) { library.setDisplayName(gameKey, name) }
+        reload()
+        return updated
+    }
+
     /**
      * Delete with Undo (docs/UI_DESIGN.md 3.3): hides [entry] at once, then asks [askUndo] (the snackbar,
      * about 8 seconds). If it returns true the entry is back; otherwise, or if the caller goes away, the
