@@ -131,6 +131,12 @@ internal class Commands(
     /** The SRAM write path. Only [DeviceSession.restoreDmgSave] may call this. */
     internal fun dmgCartWriter() = DmgCartWriteAccess(this, transport)
 
+    /** Restricted cartridge access for GBA save backups and detection (no data writes possible). */
+    internal fun agbCartAccess() = AgbCartAccess(this, transport)
+
+    /** The GBA save write path (SRAM, EEPROM, Flash erase / program). Only [DeviceSession.restoreAgbSave] may call this. */
+    internal fun agbCartWriter() = AgbCartWriteAccess(this, transport)
+
     // ---- header ------------------------------------------------------------------------------
 
     /**

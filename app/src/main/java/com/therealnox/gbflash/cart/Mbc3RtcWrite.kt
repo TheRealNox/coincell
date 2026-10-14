@@ -9,7 +9,7 @@ class RtcTime(
     val days: Int,
     /** The 9-bit day counter overflowed while advancing; written as DH bit 7. */
     val carry: Boolean,
-) {
+) : ClockDescription {
     /** Register values in the order they are written (8 = S .. 12 = DH). The halt bit is always 0. */
     fun registers(): IntArray = intArrayOf(
         seconds % 60,
@@ -19,7 +19,7 @@ class RtcTime(
         ((days shr 8) and 1) or (if (carry) 0x80 else 0),
     )
 
-    fun describe(): String = "${days}d %02d:%02d:%02d".format(hours, minutes, seconds) + if (carry) " (day counter overflowed)" else ""
+    override fun describe(): String = "${days}d %02d:%02d:%02d".format(hours, minutes, seconds) + if (carry) " (day counter overflowed)" else ""
 }
 
 /** Pure clock arithmetic for "restore clock from backup". */

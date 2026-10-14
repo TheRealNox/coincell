@@ -1,6 +1,7 @@
 package com.therealnox.gbflash
 
 import android.app.Application
+import com.therealnox.gbflash.cart.AgbDatabase
 import com.therealnox.gbflash.library.LibraryStore
 import com.therealnox.gbflash.library.SaveLibrary
 import com.therealnox.gbflash.ui.settings.AppPrefs
@@ -18,6 +19,15 @@ class GbfApp : Application() {
     val library: SaveLibrary by lazy { SaveLibrary(File(filesDir, "saves")) }
     val libraryStore: LibraryStore by lazy { LibraryStore(library, CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)) }
     val prefs: AppPrefs by lazy { AppPrefs(this) }
+
+    /** FlashGBX GBA database (assets/db_agb.tsv, GPL-3.0). Empty if the asset cannot be read: detection then falls back to probing. */
+    val agbDatabase: AgbDatabase by lazy {
+        try {
+            assets.open("db_agb.tsv").use { AgbDatabase.parse(it) }
+        } catch (_: Exception) {
+            AgbDatabase.EMPTY
+        }
+    }
 
     val versionName: String
         get() = try {

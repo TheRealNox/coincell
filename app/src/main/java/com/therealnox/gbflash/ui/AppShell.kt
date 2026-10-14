@@ -36,6 +36,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -90,6 +94,9 @@ private enum class Tab(val route: Any, val label: String) {
     DEVICE(DeviceRoute, "Device"),
     SETTINGS(SettingsRoute, "Settings"),
 }
+
+private const val TAB_FADE_MS = 180
+private const val PAGE_MS = 280
 
 private fun NavDestination?.isRoute(vararg routes: KClass<*>): Boolean =
     this?.hierarchy?.any { d -> routes.any { d.hasRoute(it) } } == true
@@ -252,7 +259,51 @@ private fun AppNavHost(
     versionName: String,
     openTab: (Tab) -> Unit,
 ) {
-    NavHost(nav, startDestination = if (start == "device") DeviceRoute else LibraryRoute) {
+    val tabs = arrayOf<KClass<*>>(LibraryRoute::class, DeviceRoute::class, SettingsRoute::class)
+    fun isTabSwitch(from: NavDestination, to: NavDestination) = from.isRoute(*tabs) && to.isRoute(*tabs)
+    NavHost(
+        nav,
+        startDestination = if (start == "device") DeviceRoute else LibraryRoute,
+        // Explicit transitions, so the arrow and the predictive back gesture both scrub a page sliding to the right
+        // instead of navigation-compose's default scale-down-and-fade.
+        enterTransition = {
+            if (isTabSwitch(initialState.destination, targetState.destination)) {
+                fadeIn(tween(TAB_FADE_MS))
+            } else {
+                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Start, tween(PAGE_MS)) + fadeIn(tween(PAGE_MS))
+            }
+        },
+        exitTransition = {
+            if (isTabSwitch(initialState.destination, targetState.destination)) {
+                fadeOut(tween(TAB_FADE_MS))
+            } else {
+                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Start, tween(PAGE_MS), targetOffset = { it / 4 }) + fadeOut(tween(PAGE_MS))
+            }
+        },
+        popEnterTransition = {
+            if (isTabSwitch(initialState.destination, targetState.destination)) {
+                fadeIn(tween(TAB_FADE_MS))
+            } else {
+                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.End, tween(PAGE_MS), initialOffset = { it / 4 }) + fadeIn(tween(PAGE_MS))
+            }
+        },
+        popExitTransition = {
+            if (isTabSwitch(initialState.destination, targetState.destination)) {
+                fadeOut(tween(TAB_FADE_MS))
+            } else {
+                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.End, tween(PAGE_MS)) + fadeOut(tween(PAGE_MS))
+            }
+        },
+        // The back gesture uses these, not popEnter/popExit; their defaults are a scale-down ("zoom out").
+        // Same slide as the arrow, so the page follows the finger.
+        predictivePopEnterTransition = {
+            slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.End, tween(PAGE_MS), initialOffset = { it / 4 })
+        },
+        predictivePopExitTransition = {
+            slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.End, tween(PAGE_MS))
+        },
+        sizeTransform = null,
+    ) {
         composable<LibraryRoute> {
             val vm = viewModel<LibraryViewModel>(factory = viewModelFactory { initializer { LibraryViewModel(store, device.state) } })
             LibraryScreen(

@@ -119,6 +119,9 @@ fun SettingsScreen(
             GroupTitle("Advanced")
             NavRow("Advanced", "Debug log, raw cartridge header, GBA read-only probe", onAdvanced)
             HorizontalDivider()
+            GroupTitle("Support")
+            SupportRow()
+            HorizontalDivider()
             GroupTitle("About")
             NavRow("About GBFlash", "Version, licence and credits", onAbout)
         }
@@ -259,7 +262,7 @@ fun GbaProbeScreen(onBack: () -> Unit) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
                 "A read-only look at the save area of a Game Boy Advance cartridge, for hardware debugging. Nothing is written. " +
-                    "GBA backup and restore come in a later version.",
+                    "GBA backup and restore are on the Device tab; this probe only reads the 64 KiB save window.",
             )
             Button(onClick = shell.device::probeAgbSave, enabled = ready, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                 Text("Probe GBA save window (read-only)")
@@ -356,13 +359,16 @@ fun AboutScreen(versionName: String, onBack: () -> Unit, onFirmware: () -> Unit)
             Text("GBFlash for Android", style = MaterialTheme.typography.headlineSmall)
             Text("Version $versionName", style = MaterialTheme.typography.bodyMedium)
             Text(
-                "Backs up and restores Game Boy and Game Boy Color save games with a GBFlash cartridge reader over USB.",
+                "Backs up and restores Game Boy, Game Boy Color and Game Boy Advance save games with a GBFlash cartridge reader over USB.",
                 style = MaterialTheme.typography.bodyMedium,
             )
             state.firmware?.let { fw ->
                 KeyValueRow("Reader firmware", "${fw.versionString}, PCB ${fw.pcbLabel}")
                 TextButton(onClick = onFirmware, Modifier.heightIn(min = 48.dp)) { Text("Firmware details") }
             }
+            HorizontalDivider()
+            SectionHeader("Support")
+            SupportRow()
             HorizontalDivider()
             SectionHeader("Licence")
             Text("GBFlash for Android is free software, licensed under the GNU General Public License, version 3 (GPL-3.0).")
@@ -374,6 +380,11 @@ fun AboutScreen(versionName: String, onBack: () -> Unit, onFirmware: () -> Unit)
             Text(
                 "The cartridge protocol, the header parsing and the save backup and restore logic are ported from FlashGBX. " +
                     "https://github.com/lesserkuma/FlashGBX",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text("GBA cartridge database (GPL-3.0)", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "The GBA save type lookup uses a reduced copy of FlashGBX's db_AGB.json (config/db_AGB.json), (c) Lesserkuma and the FlashGBX contributors, GPL-3.0.",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text("usb-serial-for-android by Mike Wakerly and contributors (MIT)", style = MaterialTheme.typography.titleSmall)

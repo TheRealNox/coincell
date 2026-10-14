@@ -266,10 +266,12 @@ fun BackupDetailScreen(
                 Column(Modifier.padding(16.dp)) {
                     KeyValueRow("Size", "${formatSizeKiB(entry.size)} (${entry.size} B)", mono = true)
                     KeyValueRow("CRC32", crcText(entry.crc32), mono = true)
+                    entry.saveType?.let { KeyValueRow("Save type", com.therealnox.gbflash.cart.AgbSaveTypes.label(it) + (entry.saveTypeSource?.let { s -> " (${s.label})" } ?: "")) }
+                    entry.flashChip?.let { KeyValueRow("Flash chip", it) }
                     KeyValueRow(
                         "Clock",
                         when {
-                            entry.rtc != null -> "Included (48 B footer): ${entry.rtc.describe()}"
+                            entry.clock != null -> "Included (${if (entry.agbRtc != null) 16 else 48} B footer): ${entry.clock!!.describe()}"
                             entry.rtcDeclared -> "Declared by the cartridge but not read"
                             else -> "None"
                         },

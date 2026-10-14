@@ -1,5 +1,7 @@
 package com.therealnox.gbflash.save
 
+import com.therealnox.gbflash.cart.ClockDescription
+import com.therealnox.gbflash.cart.ClockValues
 import com.therealnox.gbflash.cart.DmgCartIo
 import com.therealnox.gbflash.cart.DmgCartWriter
 import com.therealnox.gbflash.cart.DmgMapper
@@ -23,10 +25,10 @@ internal sealed interface RestoreOutcome {
     class Verified(
         val crc32: Long,
         /** The clock values written, or null if the clock was left alone. */
-        val rtcWritten: RtcTime?,
+        val rtcWritten: ClockDescription?,
         /** Set if the clock write was requested but failed (the save itself was verified). */
         val rtcError: String?,
-        val rtcReadBack: RtcSnapshot?,
+        val rtcReadBack: ClockValues?,
         override val warnings: List<String>,
     ) : RestoreOutcome
 

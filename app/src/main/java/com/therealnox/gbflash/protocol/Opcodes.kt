@@ -1,6 +1,10 @@
 package com.therealnox.gbflash.protocol
 
-/** Command opcodes (spec 3.1, LK:31-80). Only the ones used by milestone 1. */
+/**
+ * Command opcodes (spec 3.1, LK:31-80): the ones that cannot change cartridge memory. The cartridge write opcodes
+ * (DMG `B3`; GBA `C2`, `C4`, `C6`, `C7`, `D4`) are deliberately NOT defined here: each lives privately in the one file
+ * that is allowed to send it (see `DmgCartWriteAccess`, `AgbCartAccess`, `AgbCartWriteAccess`).
+ */
 internal object Op {
     const val QUERY_FW_INFO = 0xA1
     const val SET_MODE_AGB = 0xA2
@@ -23,7 +27,9 @@ internal object Op {
     const val DMG_MBC_RESET = 0xB4
     const val AGB_CART_READ = 0xC1
     const val AGB_CART_READ_SRAM = 0xC3
+    const val AGB_CART_READ_EEPROM = 0xC5
     const val AGB_BOOTUP_SEQUENCE = 0xC9
+    const val AGB_READ_GPIO_RTC = 0xCA
     const val CART_PWR_ON = 0xF2
     const val CART_PWR_OFF = 0xF3
     const val QUERY_CART_PWR = 0xF4

@@ -3,7 +3,9 @@ package com.therealnox.gbflash.ui
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -87,7 +89,8 @@ fun ScreenFrame(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val shell = LocalShell.current
-    Column(Modifier.fillMaxSize()) {
+    // Opaque, so screens never show through each other while a navigation transition runs.
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopAppBar(
             title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             navigationIcon = {

@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -26,7 +28,9 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.UsbOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -51,6 +55,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.therealnox.gbflash.cart.AgbHeader
+import com.therealnox.gbflash.cart.AgbSaveTypes
+import com.therealnox.gbflash.device.AgbSaveState
 import com.therealnox.gbflash.cart.CartHeader
 import com.therealnox.gbflash.cart.DmgHeader
 import com.therealnox.gbflash.device.ConnectionStatus
@@ -276,7 +282,13 @@ private fun CartridgeCard(
                 is AgbHeader -> {
                     KeyValueRow("Game code", header.gameCode)
                     KeyValueRow("Maker", header.makerCode)
-                    KeyValueRow("Save", header.save.label)
+                    val save = state.agbSave
+                    if (save != null) {
+                        KeyValueRow("Save type", save.effectiveType?.let { AgbSaveTypes.label(it) } ?: "Unknown")
+                        save.effectiveSource?.let { KeyValueRow("Found by", it.label) }
+                        save.detection.dbName?.let { KeyValueRow("Database", it) }
+                        save.detection.chipLabel?.let { KeyValueRow("Flash chip", it) }
+                    }
                 }
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -287,20 +299,16 @@ private fun CartridgeCard(
                 TextButton(onClick = { onOpenGame(inLibrary.key) }, Modifier.heightIn(min = 48.dp)) {
                     Text("In your library: ${inLibrary.count} ${if (inLibrary.count == 1) "backup" else "backups"}, latest ${formatDateShort(inLibrary.latestMillis)}")
                 }
-            } else if (header is DmgHeader && state.backupAvailable) {
+            } else if (state.backupAvailable) {
                 Text("Not in your library yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (header is AgbHeader) {
-                Text(
-                    "Backing up GBA saves comes in a later version. The header was read at 3.3 V; power off before swapping.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                state.agbSave?.let { save -> AgbSaveTypeControls(save, state, device) }
             }
             state.backupUnavailableReason?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
 
             // ---- actions -----------------------------------------------------------------------
-            if (header is DmgHeader) {
+            if (header is DmgHeader || header is AgbHeader) {
                 Button(
                     onClick = { device.backupSave(); onBackupStarted() },
                     enabled = state.backupAvailable && !state.busy && state.restore == null,
@@ -422,5 +430,78 @@ private fun readLimited(context: android.content.Context, uri: Uri, limit: Int):
             out.write(buf, 0, n)
         }
         out.toByteArray()
+    }
+}
+
+/**
+ * GBA save type: why the app believes it, the "Detect" probe for unknown cartridges, and the list to change it. The
+ * probe is never automatic: it makes the brief Flash-ID writes described in the text.
+ */
+@Composable
+private fun AgbSaveTypeControls(save: AgbSaveState, state: DeviceState, device: DeviceController) {
+    var choose by remember { mutableStateOf(false) }
+    save.detection.note?.let {
+        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    if (save.effectiveType == null) {
+        StatusCard(
+            "Save type unknown",
+            "This cartridge is not in the FlashGBX database. Let the app probe the cartridge, or choose the save type yourself.",
+            Severity.WARNING,
+        )
+    } else if (save.uncertain) {
+        Text(
+            "The save type comes from a probe, which can be wrong. Check it, or change it.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (save.effectiveType == null || save.detection.source != com.therealnox.gbflash.cart.SaveTypeSource.DATABASE) {
+            OutlinedButton(onClick = device::detectAgbSaveType, enabled = !state.busy, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(if (save.probing) "Probing..." else "Detect save type")
+            }
+        }
+        TextButton(onClick = { choose = true }, enabled = !state.busy, modifier = Modifier.heightIn(min = 48.dp)) { Text("Change save type") }
+    }
+    if (save.effectiveType == null || save.detection.source != com.therealnox.gbflash.cart.SaveTypeSource.DATABASE) {
+        Text(
+            "Detecting briefly sends the Flash chip its ID command and, on SRAM carts, flips and restores one byte. Back up first if the save is precious.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    if (choose) {
+        AlertDialog(
+            onDismissRequest = { choose = false },
+            title = { Text("Save type") },
+            text = {
+                Column {
+                    val detected = save.detection.typeId
+                    SaveTypeOption("Use the detected one (${detected?.let { AgbSaveTypes.label(it) } ?: "unknown"})", save.userChoice == null) {
+                        choose = false
+                        device.chooseAgbSaveType(null)
+                    }
+                    AgbSaveTypes.SUPPORTED.forEach { type ->
+                        SaveTypeOption(AgbSaveTypes.label(type), save.userChoice == type) {
+                            choose = false
+                            device.chooseAgbSaveType(type)
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { choose = false }) { Text("Close") } },
+        )
+    }
+}
+
+@Composable
+private fun SaveTypeOption(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Text(label, Modifier.padding(start = 12.dp))
     }
 }

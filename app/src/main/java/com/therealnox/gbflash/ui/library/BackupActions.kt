@@ -91,8 +91,8 @@ fun rememberBackupActions(game: GameSummary?, onDeleted: () -> Unit = {}): Backu
         ModalBottomSheet(onDismissRequest = { exportChoice = null }) {
             Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Export .sav", style = MaterialTheme.typography.titleLarge)
-                Text("This backup includes the cartridge clock (RTC). Add it as a 48-byte footer after the save (FlashGBX and emulator format), or export the save only?")
-                Button(onClick = { exportChoice = null; start(entry, true) }, Modifier.fillMaxWidth()) { Text("Save + clock (48 byte footer)") }
+                Text("This backup includes the cartridge clock (RTC). Add it as a footer after the save (FlashGBX format: ${if (entry.agbRtc != null) 16 else 48} bytes), or export the save only?")
+                Button(onClick = { exportChoice = null; start(entry, true) }, Modifier.fillMaxWidth()) { Text("Save + clock (${if (entry.agbRtc != null) 16 else 48} byte footer)") }
                 OutlinedButton(onClick = { exportChoice = null; start(entry, false) }, Modifier.fillMaxWidth()) { Text("Save only") }
                 TextButton(onClick = { exportChoice = null }, Modifier.fillMaxWidth()) { Text("Cancel") }
             }

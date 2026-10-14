@@ -1,9 +1,18 @@
 package com.therealnox.gbflash.protocol
 
+import com.therealnox.gbflash.cart.AgbHeader
+import com.therealnox.gbflash.cart.AgbRtcRead
+import com.therealnox.gbflash.cart.AgbSaveDetection
 import com.therealnox.gbflash.cart.AgbSaveHint
+import com.therealnox.gbflash.cart.ClockProbeResult
 import com.therealnox.gbflash.cart.CartHeader
 import com.therealnox.gbflash.cart.DmgHeader
 import com.therealnox.gbflash.cart.analyzeSaveWindow
+import com.therealnox.gbflash.save.AgbBackupPlan
+import com.therealnox.gbflash.save.AgbBackupResult
+import com.therealnox.gbflash.save.AgbDetector
+import com.therealnox.gbflash.save.AgbSaveBackup
+import com.therealnox.gbflash.save.AgbSaveRestore
 import com.therealnox.gbflash.save.BackupPlan
 import com.therealnox.gbflash.save.DmgBackupResult
 import com.therealnox.gbflash.save.DmgSaveBackup
@@ -101,6 +110,78 @@ class DeviceSession private constructor(
         val writer = commands.dmgCartWriter()
         DmgSaveRestore(access, writer, access::prepare, access::releaseBus, nowSeconds, log)
             .run(plan, data, clockFooter, adjustClock, isCancelled, onProgress)
+    }
+
+    /**
+     * Probes the inserted GBA cartridge for its save type (FlashGBX's detect run, see [AgbDetector]). Writes only what
+     * [com.therealnox.gbflash.cart.AgbCartIo] allows: the Flash identify sequences and the bank select.
+     */
+    internal suspend fun detectAgbSave(
+        isCancelled: () -> Boolean,
+        onProgress: (done: Long, total: Long) -> Unit,
+        log: (String) -> Unit = {},
+    ): AgbSaveDetection = locked {
+        check(commands.platform == CartPlatform.GBA) { "GBA mode is not active" }
+        val access = commands.agbCartAccess()
+        AgbDetector(access, access::prepare, log).probe(isCancelled, onProgress)
+    }
+
+    /**
+     * Reads and double-checks the whole save of the GBA cartridge in [plan] into memory (see [AgbSaveBackup]). Never
+     * writes save data and never switches platform (GBA mode must already be active). [askRtc] is called (blocking)
+     * when a clock was found.
+     */
+    internal suspend fun backupAgbSave(
+        plan: AgbBackupPlan.Ready,
+        isCancelled: () -> Boolean,
+        onProgress: (done: Long, total: Long) -> Unit,
+        log: (String) -> Unit = {},
+        nowSeconds: () -> Long = { System.currentTimeMillis() / 1000 },
+        includeRtc: Boolean = true,
+        askRtc: (() -> Boolean)? = null,
+    ): AgbBackupResult = locked {
+        check(commands.platform == CartPlatform.GBA) { "GBA mode is not active" }
+        val access = commands.agbCartAccess()
+        AgbSaveBackup(access, access::prepare, nowSeconds, log).run(plan, isCancelled, onProgress, includeRtc, askRtc)
+    }
+
+    /** Looks for the GPIO clock of the inserted GBA cartridge (the CA command plus a ROM read; no save access). */
+    internal suspend fun probeAgbClock(log: (String) -> Unit = {}): ClockProbeResult = locked {
+        check(commands.platform == CartPlatform.GBA) { "GBA mode is not active" }
+        val access = commands.agbCartAccess()
+        access.prepare()
+        when (val p = AgbRtcRead.probe(access, log)) {
+            is AgbRtcRead.Probe.Present -> ClockProbeResult(true, null)
+            is AgbRtcRead.Probe.Absent -> ClockProbeResult(false, p.reason)
+        }
+    }
+
+    /**
+     * Writes [data] to the GBA cartridge described by [expectedHeader] / [plan] and verifies it by reading everything
+     * back (see [AgbSaveRestore]). This is the ONLY function that creates the GBA write path. Before touching anything
+     * it re-reads the cartridge header and throws [HeaderChangedException] (nothing written) if it differs from
+     * [expectedHeader]. [clockFooter] is the 16-byte GBA clock footer to restore, or null to leave the clock alone.
+     */
+    internal suspend fun restoreAgbSave(
+        plan: AgbBackupPlan.Ready,
+        expectedHeader: AgbHeader,
+        data: ByteArray,
+        clockFooter: ByteArray?,
+        adjustClock: Boolean = true,
+        isCancelled: () -> Boolean,
+        onProgress: (RestorePhase, done: Long, total: Long) -> Unit,
+        log: (String) -> Unit = {},
+        nowSeconds: () -> Long = { System.currentTimeMillis() / 1000 },
+    ): RestoreOutcome = locked {
+        check(commands.platform == CartPlatform.GBA) { "GBA mode is not active" }
+        val current = commands.readHeader(CartPlatform.GBA) as? AgbHeader
+            ?: throw HeaderChangedException("The cartridge header could not be read again")
+        if (!current.logoValid || !current.raw.contentEquals(expectedHeader.raw)) {
+            throw HeaderChangedException("The cartridge header changed since the review (was the cartridge swapped?). Nothing was written.")
+        }
+        val access = commands.agbCartAccess()
+        val writer = commands.agbCartWriter()
+        AgbSaveRestore(access, writer, access::prepare, nowSeconds, log).run(plan, data, clockFooter, adjustClock, isCancelled, onProgress)
     }
 
     private fun sameHeader(a: DmgHeader, b: DmgHeader): Boolean =

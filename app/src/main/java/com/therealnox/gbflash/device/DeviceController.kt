@@ -1,5 +1,10 @@
 package com.therealnox.gbflash.device
 
+import com.therealnox.gbflash.cart.AgbDatabase
+import com.therealnox.gbflash.cart.AgbHeader
+import com.therealnox.gbflash.cart.AgbRtcSnapshot
+import com.therealnox.gbflash.cart.AgbSaveDetection
+import com.therealnox.gbflash.cart.AgbSaveTypes
 import com.therealnox.gbflash.cart.DmgHeader
 import com.therealnox.gbflash.cart.DmgMapper
 import com.therealnox.gbflash.library.BackupEntry
@@ -16,6 +21,7 @@ import com.therealnox.gbflash.restore.RestorePolicy
 import com.therealnox.gbflash.restore.RestoreRequest
 import com.therealnox.gbflash.restore.RestoreResult
 import com.therealnox.gbflash.restore.SafetyCopy
+import com.therealnox.gbflash.save.AgbBackupPlan
 import com.therealnox.gbflash.save.BackupCancelledException
 import com.therealnox.gbflash.save.BackupPlan
 import com.therealnox.gbflash.save.RestorePhase
@@ -61,6 +67,8 @@ class DeviceController(
     private val openSession: suspend (SerialLink) -> DeviceSession = { DeviceSession.open(it, debugLog::add) },
     /** The cartridge is powered off after this long without an operation. */
     private val idlePowerOffMillis: Long = DEFAULT_IDLE_POWER_OFF_MS,
+    /** FlashGBX's GBA database (save type lookup by header SHA-1). */
+    private val agbDatabase: AgbDatabase = AgbDatabase.EMPTY,
 ) {
     private val _state = MutableStateFlow(DeviceState())
     val state: StateFlow<DeviceState> = _state
@@ -69,6 +77,7 @@ class DeviceController(
     private var currentReader: ReaderRef? = null
     private var connecting = false
     private var plan: BackupPlan? = null
+    private var agbPlan: AgbBackupPlan? = null
     private var game: GameInfo? = null
     private val cancelRequested = AtomicBoolean(false)
     private var coordinator: RestoreCoordinator? = null
@@ -168,6 +177,7 @@ class DeviceController(
         session = null
         currentReader = null
         plan = null
+        agbPlan = null
         game = null
         coordinator = null
     }
@@ -186,6 +196,7 @@ class DeviceController(
         if (st.status != ConnectionStatus.CONNECTED || st.busy || st.restore != null || st.backup is BackupUi.Running) return
         val previous = st.platform
         plan = null
+        agbPlan = null
         game = null
         _state.update {
             clearCartState(it).copy(platform = platform, busy = true, busyLabel = "Reading ${platform.shortName} header", cartPowered = false)
@@ -198,16 +209,28 @@ class DeviceController(
                 var available = false
                 var reason: String? = null
                 var cartGame: GameInfo? = null
+                var agbSave: AgbSaveState? = null
                 if (header is DmgHeader && platform == CartPlatform.GB_GBC) {
                     val p = BackupPlan.forHeader(header)
                     plan = p
                     available = p is BackupPlan.Ready
                     reason = (p as? BackupPlan.Unavailable)?.reason
                     cartGame = GameInfo.fromDmg(header).also { game = it }
+                } else if (header is AgbHeader && platform == CartPlatform.GBA) {
+                    // Detection order (a) patch marker, (b) FlashGBX database; (c) probing is the user's explicit choice.
+                    val detection = AgbSaveDetection.fromHeader(header, agbDatabase)
+                    val saveState = AgbSaveState(detection)
+                    agbSave = saveState
+                    debugLog.add("GBA save type: ${detection.label} from ${detection.source?.label ?: "nothing"}; database: ${detection.dbName ?: "no entry"}")
+                    val p = AgbBackupPlan.forHeader(header, saveState.effectiveType, saveState.effectiveSource)
+                    agbPlan = p
+                    available = p is AgbBackupPlan.Ready
+                    reason = (p as? AgbBackupPlan.Unavailable)?.reason
+                    cartGame = GameInfo.fromAgb(header).also { game = it }
                 }
                 _state.update {
                     it.copy(
-                        header = header, headerPlatform = platform, cartGame = cartGame,
+                        header = header, headerPlatform = platform, cartGame = cartGame, agbSave = agbSave,
                         backupAvailable = available, backupUnavailableReason = reason,
                     )
                 }
@@ -235,6 +258,7 @@ class DeviceController(
                 s.powerOffCart()
                 debugLog.add("Cartridge powered off")
                 plan = null
+                agbPlan = null
                 game = null
                 _state.update {
                     clearCartState(it).copy(
@@ -251,7 +275,7 @@ class DeviceController(
     }
 
     private fun clearCartState(it: DeviceState) = it.copy(
-        header = null, headerPlatform = null, cartGame = null, agbSaveHint = null, error = null, info = null,
+        header = null, headerPlatform = null, cartGame = null, agbSaveHint = null, agbSave = null, error = null, info = null,
         backupAvailable = false, backupUnavailableReason = null, backup = null, restore = null,
     )
 
@@ -284,6 +308,60 @@ class DeviceController(
         }
     }
 
+    // ---- GBA save type -------------------------------------------------------------------------
+
+    /** The user picked [type] from the list (null: back to the detected one). */
+    fun chooseAgbSaveType(type: Int?) {
+        val st = _state.value
+        val header = st.header as? AgbHeader ?: return
+        val current = st.agbSave ?: return
+        if (st.busy || st.restore != null || st.backup is BackupUi.Running) return
+        debugLog.add("GBA save type chosen by the user: ${type?.let { AgbSaveTypes.label(it) } ?: "the detected one"}")
+        applyAgbSelection(header, current.copy(userChoice = type))
+    }
+
+    private fun applyAgbSelection(header: AgbHeader, save: AgbSaveState) {
+        val p = AgbBackupPlan.forHeader(header, save.effectiveType, save.effectiveSource)
+        agbPlan = p
+        _state.update {
+            it.copy(
+                agbSave = save,
+                backupAvailable = p is AgbBackupPlan.Ready,
+                backupUnavailableReason = (p as? AgbBackupPlan.Unavailable)?.reason,
+            )
+        }
+    }
+
+    /**
+     * Step (c) of the detection order: probes the cartridge (Flash ID, SRAM, EEPROM). Only on request, because
+     * it makes the brief identification writes of [com.therealnox.gbflash.cart.AgbCartIo]. The result replaces the
+     * database lookup and is shown as "probe", for the user to confirm or change.
+     */
+    fun detectAgbSaveType() {
+        val s = session ?: return
+        val st = _state.value
+        val header = st.header as? AgbHeader ?: return
+        if (st.busy || st.platform != CartPlatform.GBA || st.restore != null || st.backup is BackupUi.Running || !header.logoValid) return
+        cancelRequested.set(false)
+        _state.update { it.copy(busy = true, busyLabel = "Probing the save memory", error = null, info = null, agbSave = it.agbSave?.copy(probing = true)) }
+        scope.launch {
+            try {
+                debugLog.add("--- Probe the GBA save memory ---")
+                val detection = s.detectAgbSave(cancelRequested::get, { _, _ -> }, debugLog::add)
+                debugLog.add("Probe result: ${detection.label}${detection.chipLabel?.let { " ($it)" } ?: ""}${detection.note?.let { ": $it" } ?: ""}")
+                val current = _state.value.agbSave ?: AgbSaveState(detection)
+                applyAgbSelection(header, current.copy(detection = detection, userChoice = null, probing = false))
+            } catch (e: BackupCancelledException) {
+                debugLog.add("Probe cancelled")
+            } catch (e: Exception) {
+                debugLog.add("Probe failed: $e")
+                _state.update { it.copy(error = "The probe failed: ${e.message ?: e}") }
+            } finally {
+                _state.update { it.copy(busy = false, busyLabel = null, agbSave = it.agbSave?.copy(probing = false)) }
+            }
+        }
+    }
+
     // ---- idle power-off (docs/UI_DESIGN.md 3.5) -------------------------------------------------
 
     private fun idleKey(s: DeviceState): Boolean {
@@ -311,6 +389,13 @@ class DeviceController(
      * the library. Only possible after a successful GB / GBC header read; never for GBA.
      */
     fun backupSave() {
+        if (_state.value.platform == CartPlatform.GBA) {
+            val gp = agbPlan as? AgbBackupPlan.Ready ?: return
+            val gst = _state.value
+            if (gst.busy || gst.restore != null || gst.rtcPrompt != null) return
+            runAgbBackup(gp)
+            return
+        }
         val p = plan as? BackupPlan.Ready ?: return
         val st = _state.value
         if (st.busy || st.restore != null || st.rtcPrompt != null) return
@@ -393,6 +478,68 @@ class DeviceController(
         }
     }
 
+    /**
+     * GBA backup: probes for a clock (if the header allows one), asks FlashGBX's question when it finds one, reads the
+     * save twice per chunk and stores it with the save type and its source.
+     */
+    private fun runAgbBackup(p: AgbBackupPlan.Ready) {
+        val s = session ?: return
+        val st = _state.value
+        val g = game ?: return
+        if (st.busy || st.restore != null || st.platform != CartPlatform.GBA || st.headerPlatform != CartPlatform.GBA) return
+        cancelRequested.set(false)
+        val title = g.title.ifBlank { "cartridge" }
+        _state.update {
+            it.copy(busy = true, busyLabel = "Backing up", error = null, info = null, backup = BackupUi.Running(title, 0L to p.saveSize * 2L))
+        }
+        scope.launch {
+            var outcome: BackupUi = BackupUi.Cancelled
+            try {
+                debugLog.add("--- Back up GBA save (${p.saveLabel} from ${p.source.label}, ${p.saveSize} bytes) ---")
+                val result = s.backupAgbSave(
+                    plan = p,
+                    isCancelled = cancelRequested::get,
+                    onProgress = { done, total ->
+                        _state.update { st2 -> if (st2.backup is BackupUi.Running) st2.copy(backup = BackupUi.Running(title, done to total)) else st2 }
+                    },
+                    log = debugLog::add,
+                    askRtc = ::askRtcBlocking,
+                )
+                val suspect = SaveCheck.suspectReason(result.data)
+                val fw = s.firmware
+                val entry = withContext(io) {
+                    library.store(
+                        g,
+                        NewBackup(
+                            save = result.data,
+                            rtcFooter = result.rtc?.toFooter(),
+                            rtcProbePresent = result.rtcProbePresent,
+                            rtcDeclared = false,
+                            firmware = fw.versionString + (fw.deviceName?.let { " ($it)" } ?: ""),
+                            appVersion = appVersion,
+                            verified = true,
+                            suspectReason = suspect,
+                            saveType = p.saveType,
+                            saveTypeSource = p.source,
+                            flashChip = result.flashChipLabel,
+                        ),
+                    )
+                }
+                debugLog.add("Backup stored: ${entry.id} CRC32 %08X".format(entry.crc32))
+                onLibraryChanged()
+                outcome = BackupUi.Result(entry, title, result.warnings)
+            } catch (e: BackupCancelledException) {
+                debugLog.add("Backup cancelled by user")
+                outcome = BackupUi.Cancelled
+            } catch (e: Exception) {
+                debugLog.add("Backup failed: $e")
+                outcome = BackupUi.Failed(e.message ?: e.toString())
+            } finally {
+                _state.update { it.copy(busy = false, busyLabel = null, backup = outcome) }
+            }
+        }
+    }
+
     /** Called on the I/O thread after the RTC probe found a clock the header did not declare. */
     private fun askRtcBlocking(): Boolean {
         val answer = CompletableFuture<Boolean>()
@@ -421,6 +568,10 @@ class DeviceController(
 
     private fun beginRestore(entry: BackupEntry, undoOf: BackupEntry?) {
         val st = _state.value
+        if (st.platform == CartPlatform.GBA) {
+            beginAgbRestore(entry, undoOf)
+            return
+        }
         val header = st.header as? DmgHeader
         if (session == null || header == null || st.busy || st.backup is BackupUi.Running) return
         if (st.status != ConnectionStatus.CONNECTED || st.platform != CartPlatform.GB_GBC || st.headerPlatform != CartPlatform.GB_GBC) return
@@ -431,6 +582,44 @@ class DeviceController(
             debugLog.add("Restore review: ${entry.id} -> ${review.cartGame.key}: ${review.match}")
             _state.update {
                 // The user may have left the flow while the review was being prepared.
+                if (it.restore is RestoreUi.Loading) {
+                    it.copy(restore = RestoreUi.Review(review, restoreClock = review.clockOptionOffered, undoOf = undoOf))
+                } else {
+                    it
+                }
+            }
+        }
+    }
+
+    /**
+     * Review of a GBA restore. The only cartridge access is the read-only clock probe, and only when the backup has a
+     * clock to offer.
+     */
+    private fun beginAgbRestore(entry: BackupEntry, undoOf: BackupEntry?) {
+        val s = session ?: return
+        val st = _state.value
+        val header = st.header as? AgbHeader ?: return
+        val p = agbPlan ?: return
+        if (st.busy || st.backup is BackupUi.Running) return
+        if (st.status != ConnectionStatus.CONNECTED || st.platform != CartPlatform.GBA || st.headerPlatform != CartPlatform.GBA) return
+        _state.update { it.copy(restore = RestoreUi.Loading, error = null, info = null) }
+        scope.launch {
+            val sourceGame = withContext(io) { library.readGame(entry.gameKey) }
+            var clockPresent: Boolean? = false
+            if (entry.agbRtc != null && p is AgbBackupPlan.Ready) {
+                _state.update { it.copy(busy = true, busyLabel = "Checking the cartridge clock") }
+                clockPresent = try {
+                    s.probeAgbClock(debugLog::add).also { r -> if (!r.present) debugLog.add("No clock: ${r.note}") }.present
+                } catch (e: Exception) {
+                    debugLog.add("Clock probe failed: $e")
+                    null
+                } finally {
+                    _state.update { it.copy(busy = false, busyLabel = null) }
+                }
+            }
+            val review = RestorePolicy.reviewAgb(entry, sourceGame, header, p, clockPresent)
+            debugLog.add("Restore review: ${entry.id} -> ${review.cartGame.key}: ${review.match}")
+            _state.update {
                 if (it.restore is RestoreUi.Loading) {
                     it.copy(restore = RestoreUi.Review(review, restoreClock = review.clockOptionOffered, undoOf = undoOf))
                 } else {
@@ -550,6 +739,11 @@ class DeviceController(
     /** The largest file the import may read for the inserted cartridge, or null if no cartridge is ready. */
     fun importLimit(): Int? {
         val st = _state.value
+        if (st.platform == CartPlatform.GBA) {
+            val gp = agbPlan as? AgbBackupPlan.Ready ?: return null
+            if (st.busy || st.restore != null || game == null || st.header !is AgbHeader) return null
+            return SaveImport.maxFileSize(gp.saveSize, AgbRtcSnapshot.FOOTER_SIZE)
+        }
         val p = plan as? BackupPlan.Ready ?: return null
         if (st.busy || st.restore != null || game == null || st.header !is DmgHeader) return null
         return SaveImport.maxFileSize(p.saveSize)
@@ -560,6 +754,10 @@ class DeviceController(
      * thread, gets the size limit, and returns the file content (or throws).
      */
     fun importSav(name: String, read: (limit: Int) -> ByteArray) {
+        if (_state.value.platform == CartPlatform.GBA) {
+            importAgbSav(name, read)
+            return
+        }
         val g = game ?: return
         val p = plan as? BackupPlan.Ready ?: return
         if (_state.value.busy) return
@@ -588,6 +786,58 @@ class DeviceController(
                                 note = "Imported from $name",
                                 kind = BackupKind.IMPORTED,
                                 originalFileName = name,
+                            ),
+                        )
+                    }
+                }
+                debugLog.add("Imported ${entry.originalFileName}: ${entry.id} CRC32 %08X".format(entry.crc32))
+                onLibraryChanged()
+                _state.update {
+                    it.copy(
+                        info = "Imported ${entry.originalFileName ?: "file"} as ${entry.id} (CRC32 %08X). ".format(entry.crc32) +
+                            "It is not verified against a cartridge; restore it like any backup.",
+                    )
+                }
+            } catch (e: Exception) {
+                debugLog.add("Import failed: $e")
+                _state.update { it.copy(error = "Import failed: ${e.message}") }
+            } finally {
+                _state.update { it.copy(busy = false, busyLabel = null) }
+            }
+        }
+    }
+
+    private fun importAgbSav(name: String, read: (limit: Int) -> ByteArray) {
+        val g = game ?: return
+        val p = agbPlan as? AgbBackupPlan.Ready ?: return
+        if (_state.value.busy) return
+        _state.update { it.copy(busy = true, busyLabel = "Importing", error = null, info = null) }
+        scope.launch {
+            try {
+                val entry = withContext(io) {
+                    val limit = SaveImport.maxFileSize(p.saveSize, AgbRtcSnapshot.FOOTER_SIZE)
+                    val bytes = read(limit)
+                    if (bytes.size > limit) {
+                        throw IOException("The file is larger than $limit bytes; this cartridge's save is ${p.saveSize} bytes.")
+                    }
+                    when (val r = SaveImport.parseAgb(bytes, p.saveSize)) {
+                        is SaveImport.Result.Rejected -> throw IOException(r.reason)
+                        is SaveImport.Result.Ok -> library.store(
+                            g,
+                            NewBackup(
+                                save = r.save,
+                                rtcFooter = r.rtcFooter,
+                                rtcProbePresent = null,
+                                rtcDeclared = false,
+                                firmware = "",
+                                appVersion = appVersion,
+                                verified = false,
+                                suspectReason = SaveCheck.suspectReason(r.save),
+                                note = "Imported from $name",
+                                kind = BackupKind.IMPORTED,
+                                originalFileName = name,
+                                saveType = p.saveType,
+                                saveTypeSource = p.source,
                             ),
                         )
                     }

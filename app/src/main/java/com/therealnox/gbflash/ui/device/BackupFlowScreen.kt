@@ -145,7 +145,7 @@ fun BackupFlowScreen(
                     TextButton(onClick = close, Modifier.heightIn(min = 48.dp)) { Text("Back") }
                 }
                 BackupUi.Cancelled -> {
-                    StatusCard("Backup cancelled", "Nothing was stored. Cartridge RAM was disabled again.", Severity.INFO)
+                    StatusCard("Backup cancelled", "Nothing was stored.", Severity.INFO)
                     Button(onClick = close, Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Back") }
                 }
             }
@@ -181,7 +181,7 @@ private fun RunningContent(b: BackupUi.Running, onCancel: () -> Unit) {
         textAlign = TextAlign.Center,
     )
     Text(
-        "Keep the reader plugged in. Nothing is written to the cartridge.",
+        "Keep the reader plugged in. No save data is written to the cartridge.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
@@ -223,10 +223,17 @@ private fun ResultContent(
             Severity.WARNING,
         )
     }
-    if (e.rtc == null && e.rtcDeclared) {
+    if (e.saveType != null) {
+        Text(
+            "Save type: ${com.therealnox.gbflash.cart.AgbSaveTypes.label(e.saveType)}${e.saveTypeSource?.let { " (from ${it.label})" } ?: ""}",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        e.flashChip?.let { Text("Flash chip: $it", style = MaterialTheme.typography.bodyMedium) }
+    }
+    if (e.clock == null && e.rtcDeclared) {
         StatusCard("Clock not read", "The header declares an RTC but it could not be read.", Severity.WARNING)
     }
-    if (e.rtc != null && e.rtcProbePresent == false) {
+    if (e.clock != null && e.rtcProbePresent == false) {
         StatusCard(
             "Clock stored",
             "The RTC probe saw no clock (a freshly reset RTC looks absent), but the header declares one, so it was stored. Export without the clock if unwanted.",

@@ -62,6 +62,9 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.therealnox.gbflash.cart.AgbHeader
+import com.therealnox.gbflash.cart.AgbSaveTypes
+import com.therealnox.gbflash.cart.DmgHeader
 import com.therealnox.gbflash.device.ConnectionStatus
 import com.therealnox.gbflash.device.DeviceController
 import com.therealnox.gbflash.device.DeviceState
@@ -109,7 +112,7 @@ fun RestoreFlow(state: DeviceState, vm: DeviceController) {
     val ui = state.restore ?: return
     BackHandler { if (!state.busy) vm.closeRestore() }
     Column(Modifier.padding(0.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Stepper(ui)
+        Stepper(ui, flash = ui.isFlash())
         when (ui) {
             RestoreUi.Loading -> LoadingStep()
             is RestoreUi.Review -> ReviewStep(ui, vm)
@@ -131,7 +134,7 @@ private fun LoadingStep() {
 }
 
 @Composable
-private fun Stepper(ui: RestoreUi) {
+private fun Stepper(ui: RestoreUi, flash: Boolean) {
     val current = when (ui) {
         RestoreUi.Loading, is RestoreUi.Review -> 0
         is RestoreUi.SafetyCopyRunning, is RestoreUi.Stopped -> 1
@@ -139,7 +142,7 @@ private fun Stepper(ui: RestoreUi) {
         is RestoreUi.Working -> if (ui.phase == RestorePhase.WRITE) 2 else 3
         is RestoreUi.Done -> 4
     }
-    val steps = listOf("Review", "Safety copy", "Write", "Verify")
+    val steps = listOf("Review", "Safety copy", if (flash) "Erase and write" else "Write", "Verify")
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         steps.forEachIndexed { i, label ->
             val mark = if (i < current) "✓ " else ""
@@ -162,9 +165,18 @@ private fun ReviewStep(ui: RestoreUi.Review, vm: DeviceController) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(h.title.ifEmpty { "(empty title)" }, style = MaterialTheme.typography.titleMedium)
-            Text("GB / GBC, ${h.mapperName}")
-            Text("Global checksum 0x%04X, header checksum 0x%02X".format(h.globalChecksumStored, h.headerChecksumStored))
-            Text("Save space: ${h.save.sizeBytes?.let { RestorePolicy.formatSize(it) } ?: "unknown"}")
+            when (h) {
+                is DmgHeader -> {
+                    Text("GB / GBC, ${h.mapperName}")
+                    Text("Global checksum 0x%04X, header checksum 0x%02X".format(h.globalChecksumStored, h.headerChecksumStored))
+                    Text("Save space: ${h.save.sizeBytes?.let { RestorePolicy.formatSize(it) } ?: "unknown"}")
+                }
+                is AgbHeader -> {
+                    Text("GBA, game code ${h.gameCode}")
+                    Text("Header checksum 0x%02X".format(h.headerChecksumStored))
+                    Text("Save type: ${r.agbSaveType?.let { AgbSaveTypes.label(it) } ?: "unknown"}")
+                }
+            }
             Text("Its current save will be replaced.", fontWeight = FontWeight.Bold)
             Text("Before anything is written, the save currently on the cartridge is backed up and checked (read twice), and kept in your library as a \"Pre-restore copy\". This step cannot be skipped.")
         }
@@ -203,7 +215,7 @@ private fun ReviewStep(ui: RestoreUi.Review, vm: DeviceController) {
         }
     } else if (r.clockNote.isNotEmpty()) {
         Text(r.clockNote, style = MaterialTheme.typography.bodySmall)
-    } else if (r.header.hasRtcDeclared) {
+    } else if ((r.header as? DmgHeader)?.hasRtcDeclared == true) {
         Text("The cartridge clock will not be changed.", style = MaterialTheme.typography.bodySmall)
     }
     if (ui.undoOf != null) {
@@ -236,7 +248,8 @@ private fun EntryCard(e: BackupEntry, r: RestoreReview?) {
             }
             if (e.note.isNotEmpty()) Text("Note: ${e.note}")
             e.suspectReason?.let { Text("WARNING: $it", color = MaterialTheme.colorScheme.error) }
-            e.rtc?.let { Text("Clock in backup: ${it.describe()}") }
+            e.saveType?.let { Text("Save type: ${AgbSaveTypes.label(it)}${e.saveTypeSource?.let { s -> " (${s.label})" } ?: ""}") }
+            e.clock?.let { Text("Clock in backup: ${it.describe()}") }
         }
     }
 }
@@ -259,7 +272,7 @@ private fun MatchBlock(ui: RestoreUi.Review, r: RestoreReview, vm: DeviceControl
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("These are different games", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
                     Text("Backup: ${m.sourceTitle}\nCartridge: ${m.requiredTitle}", color = MaterialTheme.colorScheme.onErrorContainer)
-                    Text("Writing this may corrupt the game or make it unplayable. Type the cartridge title to continue.", color = MaterialTheme.colorScheme.onErrorContainer)
+                    Text("Writing this may corrupt the game or make it unplayable. Type ${m.requiredTitle} to continue.", color = MaterialTheme.colorScheme.onErrorContainer)
                     OutlinedTextField(
                         value = ui.typedTitle,
                         onValueChange = vm::setRestoreTitle,
@@ -426,6 +439,7 @@ private fun HoldToConfirmButton(label: String, onConfirm: () -> Unit, onOpenDial
 
 @Composable
 private fun WorkingStep(ui: RestoreUi.Working, vm: DeviceController) {
+    val flash = ui.isFlash()
     KeepScreenOn()
     var askStop by remember { mutableStateOf(false) }
     val (done, total) = ui.progress
@@ -433,11 +447,12 @@ private fun WorkingStep(ui: RestoreUi.Working, vm: DeviceController) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                if (writing) "Phase 2 of 3: writing the save" else "Phase 3 of 3: verifying (reading everything back twice)",
+                if (writing) (if (flash) "Phase 2 of 3: erasing and writing the save, sector by sector" else "Phase 2 of 3: writing the save") else "Phase 3 of 3: verifying (reading everything back twice)",
                 style = MaterialTheme.typography.titleMedium,
             )
             LinearProgressIndicator(progress = { if (total > 0) (done.toFloat() / total).coerceIn(0f, 1f) else 0f }, modifier = Modifier.fillMaxWidth())
             Text("$done / $total bytes (${if (total > 0) done * 100 / total else 0}%)")
+            if (writing && flash) Text("Flash memory is erased one sector at a time before it is written, so this takes longer than other save types (up to a few minutes).")
             DontUnplug()
             if (writing) {
                 if (ui.stopRequested) {
@@ -533,3 +548,16 @@ private fun SafetyPointer(r: RestoreResult) {
 
 private fun formatTime(millis: Long): String =
     java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(millis))
+
+private fun RestoreUi.isFlash(): Boolean {
+    val review = when (this) {
+        is RestoreUi.Review -> review
+        is RestoreUi.Working -> request.review
+        is RestoreUi.Confirm -> request.review
+        is RestoreUi.SafetyCopyRunning -> request.review
+        is RestoreUi.Stopped -> request.review
+        is RestoreUi.Done -> request.review
+        RestoreUi.Loading -> return false
+    }
+    return review.agbSaveType?.let { AgbSaveTypes.isFlash(it) } == true
+}

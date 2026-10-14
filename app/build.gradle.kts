@@ -32,6 +32,9 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // The GBA database asset is also read by the JVM unit tests.
+    sourceSets["test"].resources.srcDir("src/main/assets")
 }
 
 dependencies {

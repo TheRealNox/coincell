@@ -36,3 +36,6 @@ local.properties
 
 # Personal save fixtures for :pkcore tests (never commit)
 /pkcore/src/test/fixtures-local/
+
+# Personal GBA save fixtures for :app tests (never commit)
+/app/src/test/fixtures-local/

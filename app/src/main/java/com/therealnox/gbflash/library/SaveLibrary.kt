@@ -1,6 +1,9 @@
 package com.therealnox.gbflash.library
 
+import com.therealnox.gbflash.cart.AgbRtcSnapshot
+import com.therealnox.gbflash.cart.ClockValues
 import com.therealnox.gbflash.cart.RtcSnapshot
+import com.therealnox.gbflash.cart.SaveTypeSource
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -28,7 +31,7 @@ enum class BackupKind(val json: String, val label: String) {
 /** What the app knows about a backup when it stores it. */
 class NewBackup(
     val save: ByteArray,
-    /** 48-byte RTC footer to keep next to the save, or null if the RTC is not included. */
+    /** RTC footer to keep next to the save (48 bytes for GB / GBC, 16 for GBA), or null if the RTC is not included. */
     val rtcFooter: ByteArray?,
     val rtcProbePresent: Boolean?,
     val rtcDeclared: Boolean,
@@ -41,6 +44,12 @@ class NewBackup(
     val kind: BackupKind = BackupKind.BACKUP,
     /** Name of the imported file (kind [BackupKind.IMPORTED]). */
     val originalFileName: String? = null,
+    /** GBA only: the FlashGBX save type index the save was read with (or will be written with). */
+    val saveType: Int? = null,
+    /** GBA only: where [saveType] came from. */
+    val saveTypeSource: SaveTypeSource? = null,
+    /** GBA Flash only: the chip the backup was made from, as text. */
+    val flashChip: String? = null,
 )
 
 /** One line of `restores.json`: what a restore attempt did to a cartridge. */
@@ -72,8 +81,15 @@ class BackupEntry(
     val note: String,
     val kind: BackupKind = BackupKind.BACKUP,
     val originalFileName: String? = null,
+    /** The GBA clock footer, when the entry has one (a 16 byte `rtc.bin`). `rtc` is the GB / GBC one (48 bytes). */
+    val agbRtc: AgbRtcSnapshot? = null,
+    val saveType: Int? = null,
+    val saveTypeSource: SaveTypeSource? = null,
+    val flashChip: String? = null,
 ) {
-    val rtcIncluded: Boolean get() = rtc != null
+    /** The stored clock of either platform. */
+    val clock: ClockValues? get() = rtc ?: agbRtc
+    val rtcIncluded: Boolean get() = clock != null
     val suspect: Boolean get() = suspectReason != null
 }
 
@@ -87,7 +103,8 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
     /** Stores [backup] for [game]; returns the stored entry. */
     @Synchronized
     fun store(game: GameInfo, backup: NewBackup): BackupEntry {
-        require(backup.rtcFooter == null || backup.rtcFooter.size == RtcSnapshot.FOOTER_SIZE) { "RTC footer must be 48 bytes" }
+        val footerSize = footerSizeOf(game.platform)
+        require(backup.rtcFooter == null || backup.rtcFooter.size == footerSize) { "RTC footer must be $footerSize bytes for ${game.platform}" }
         val now = nowMillis()
         val gameDir = File(root, game.key)
         if (!gameDir.isDirectory && !gameDir.mkdirs()) throw IOException("Cannot create $gameDir")
@@ -96,7 +113,7 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
 
         val id = uniqueId(gameDir, now)
         val crc = crc32Of(backup.save)
-        val rtc = backup.rtcFooter?.let(RtcSnapshot::fromFooter)
+        val rtc: ClockValues? = backup.rtcFooter?.let { if (game.platform == "AGB") AgbRtcSnapshot.fromFooter(it) else RtcSnapshot.fromFooter(it) }
         val tmp = File(gameDir, "$TEMP_PREFIX$id")
         try {
             if (!tmp.mkdirs()) throw IOException("Cannot create $tmp")
@@ -213,7 +230,8 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
     @Synchronized
     fun readRtcFooter(entry: BackupEntry): ByteArray? {
         val f = File(dirOf(entry), RTC_FILE)
-        return if (f.isFile) f.readBytes().also { if (it.size != RtcSnapshot.FOOTER_SIZE) throw IOException("rtc.bin has wrong size") } else null
+        val expected = if (entry.agbRtc != null) AgbRtcSnapshot.FOOTER_SIZE else RtcSnapshot.FOOTER_SIZE
+        return if (f.isFile) f.readBytes().also { if (it.size != expected) throw IOException("rtc.bin has wrong size") } else null
     }
 
     /** `.sav` content for export (spec 7): save.sav followed by rtc.bin when [includeRtc] and present. */
@@ -291,7 +309,7 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
         moveAtomic(tmp, file)
     }
 
-    private fun backupJson(id: String, now: Long, b: NewBackup, crc: Long, rtc: RtcSnapshot?): JSONObject {
+    private fun backupJson(id: String, now: Long, b: NewBackup, crc: Long, rtc: ClockValues?): JSONObject {
         val o = JSONObject()
             .put("version", 1)
             .put("id", id)
@@ -309,7 +327,17 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
             .put("note", b.note)
             .put("kind", b.kind.json)
         b.originalFileName?.let { o.put("originalFileName", it) }
-        if (rtc != null) {
+        b.saveType?.let { o.put("saveType", it) }
+        b.saveTypeSource?.let { o.put("saveTypeSource", it.json) }
+        b.flashChip?.let { o.put("flashChip", it) }
+        if (rtc is AgbRtcSnapshot) {
+            o.put(
+                "rtc",
+                JSONObject()
+                    .put("date", "20%02d-%02d-%02d %02d:%02d:%02d".format(rtc.year, rtc.month, rtc.day, rtc.hour, rtc.minute, rtc.second))
+                    .put("weekday", rtc.weekday).put("status", "%02X".format(rtc.status)).put("readAt", rtc.timestamp),
+            )
+        } else if (rtc is RtcSnapshot) {
             o.put(
                 "rtc",
                 JSONObject()
@@ -324,7 +352,9 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
         val save = File(dir, SAVE_FILE)
         val json = JSONObject(File(dir, BACKUP_JSON).readText())
         val rtcFile = File(dir, RTC_FILE)
-        val rtc = if (rtcFile.isFile) RtcSnapshot.fromFooter(rtcFile.readBytes()) else null
+        val rtcBytes = if (rtcFile.isFile) rtcFile.readBytes() else null
+        val rtc = rtcBytes?.takeIf { it.size != AgbRtcSnapshot.FOOTER_SIZE }?.let(RtcSnapshot::fromFooter)
+        val agbRtc = rtcBytes?.takeIf { it.size == AgbRtcSnapshot.FOOTER_SIZE }?.let(AgbRtcSnapshot::fromFooter)
         val size = json.getInt("size")
         if (!save.isFile || save.length() != size.toLong()) {
             null
@@ -345,6 +375,10 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
                 note = json.optString("note"),
                 kind = BackupKind.fromJson(json.optString("kind", "").ifEmpty { null }),
                 originalFileName = if (json.has("originalFileName")) json.optString("originalFileName") else null,
+                agbRtc = agbRtc,
+                saveType = if (json.has("saveType")) json.optInt("saveType") else null,
+                saveTypeSource = SaveTypeSource.fromJson(json.optString("saveTypeSource", "").ifEmpty { null }),
+                flashChip = if (json.has("flashChip")) json.optString("flashChip") else null,
             )
         }
     } catch (_: Exception) {
@@ -374,6 +408,9 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
         const val RESTORES_JSON = "restores.json"
         private const val TEMP_PREFIX = ".tmp-"
         private val SAFE = Regex("[A-Za-z0-9_-]+")
+
+        /** Size of `rtc.bin` for a platform: 48 bytes for GB / GBC (MBC3), 16 for GBA (GPIO clock). */
+        fun footerSizeOf(platform: String): Int = if (platform == "AGB") AgbRtcSnapshot.FOOTER_SIZE else RtcSnapshot.FOOTER_SIZE
 
         fun crc32Of(data: ByteArray): Long = CRC32().also { it.update(data) }.value
     }

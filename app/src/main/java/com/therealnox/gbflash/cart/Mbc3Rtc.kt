@@ -10,12 +10,12 @@ class RtcSnapshot(
     val dayLow: Int,
     val dayHigh: Int,
     /** Unix seconds when the registers were read. */
-    val timestamp: Long,
-) {
+    override val timestamp: Long,
+) : ClockValues {
     val days: Int get() = dayLow or ((dayHigh and 0x01) shl 8)
     val halted: Boolean get() = dayHigh and 0x40 != 0
     val dayCarry: Boolean get() = dayHigh and 0x80 != 0
-    val plausible: Boolean get() = seconds < 60 && minutes < 60 && hours < 24
+    override val plausible: Boolean get() = seconds < 60 && minutes < 60 && hours < 24
 
     /**
      * The 48-byte footer shared with FlashGBX / VBA-M style emulators: S,M,H,DL,DH as u32 LE, the
@@ -29,7 +29,7 @@ class RtcSnapshot(
         return out
     }
 
-    fun describe(): String = buildString {
+    override fun describe(): String = buildString {
         append("${days}d %02d:%02d:%02d".format(hours, minutes, seconds))
         append(if (halted) ", halted" else ", running")
         if (dayCarry) append(", day counter carry set")

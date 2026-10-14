@@ -21,6 +21,7 @@ class DeviceViewModel(app: Application) : AndroidViewModel(app) {
         scope = viewModelScope,
         appVersion = gbf.versionName,
         onLibraryChanged = gbf.libraryStore::reload,
+        agbDatabase = gbf.agbDatabase,
     )
 
     override fun onCleared() {

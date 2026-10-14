@@ -1,7 +1,10 @@
 package com.therealnox.gbflash.device
 
+import com.therealnox.gbflash.cart.AgbHeader
+import com.therealnox.gbflash.cart.AgbSaveDetection
 import com.therealnox.gbflash.cart.CartHeader
 import com.therealnox.gbflash.cart.DmgHeader
+import com.therealnox.gbflash.cart.SaveTypeSource
 import com.therealnox.gbflash.library.BackupEntry
 import com.therealnox.gbflash.library.GameInfo
 import com.therealnox.gbflash.protocol.CartPlatform
@@ -67,6 +70,24 @@ sealed interface RestoreUi {
     data class Done(val request: RestoreRequest, val result: RestoreResult) : RestoreUi
 }
 
+/**
+ * The save type of the inserted GBA cartridge: what the marker / database / probe found, and what the user picked
+ * from the list (which wins). [probing] is true while a probe of the cartridge runs.
+ */
+data class AgbSaveState(
+    val detection: AgbSaveDetection,
+    val userChoice: Int? = null,
+    val probing: Boolean = false,
+) {
+    /** The save type a backup or restore will use, or null while it is unknown. */
+    val effectiveType: Int? get() = userChoice ?: detection.typeId
+
+    val effectiveSource: SaveTypeSource? get() = if (userChoice != null) SaveTypeSource.USER else detection.source
+
+    /** The list of types the user may pick from is shown when the type is unknown, probed, or the user wants to change it. */
+    val uncertain: Boolean get() = userChoice == null && detection.uncertain
+}
+
 /** Everything the app knows about the reader and the inserted cartridge. One instance, observed by every screen. */
 data class DeviceState(
     val status: ConnectionStatus = ConnectionStatus.NO_DEVICE,
@@ -79,9 +100,11 @@ data class DeviceState(
     val busyLabel: String? = null,
     val header: CartHeader? = null,
     val headerPlatform: CartPlatform? = null,
-    /** Library identity of the GB / GBC cartridge whose header was read; null otherwise. */
+    /** Library identity of the cartridge whose header was read; null otherwise. */
     val cartGame: GameInfo? = null,
     val agbSaveHint: String? = null,
+    /** GBA only: the save type found for the inserted cartridge and the user's choice. Null for GB / GBC. */
+    val agbSave: AgbSaveState? = null,
     val error: String? = null,
     /** Informational message (e.g. "Cartridge power is off"). */
     val info: String? = null,
@@ -100,12 +123,15 @@ data class DeviceState(
     val cartPowered: Boolean = false,
 ) {
     /**
-     * Restore needs a connected reader in GB / GBC mode and a header read in this session, because the
+     * Restore needs a connected reader in the cartridge's mode and a header read in this session, because the
      * review compares the backup with that header.
      */
     val restoreAvailable: Boolean
-        get() = status == ConnectionStatus.CONNECTED && platform == CartPlatform.GB_GBC &&
-            headerPlatform == CartPlatform.GB_GBC && header is DmgHeader && backupAvailable && !busy && restore == null
+        get() = status == ConnectionStatus.CONNECTED && platform != null && headerPlatform == platform &&
+            headerMatchesPlatform && backupAvailable && !busy && restore == null
+
+    private val headerMatchesPlatform: Boolean
+        get() = (platform == CartPlatform.GB_GBC && header is DmgHeader) || (platform == CartPlatform.GBA && header is AgbHeader)
 
     /** Why the restore buttons are disabled, or null when [restoreAvailable]. */
     val restoreUnavailableReason: String?
@@ -114,7 +140,7 @@ data class DeviceState(
             status != ConnectionStatus.CONNECTED -> "Connect the reader and read a cartridge to restore."
             busy || backup is BackupUi.Running || restore != null -> "Wait for the current operation to finish."
             platform == null || header == null -> "Choose the cartridge type on the Device tab to read the cartridge first."
-            headerPlatform != CartPlatform.GB_GBC -> "Restore works with GB / GBC cartridges only."
+            !headerMatchesPlatform -> "Read the cartridge header first."
             else -> backupUnavailableReason ?: "This cartridge cannot be restored to."
         }
 

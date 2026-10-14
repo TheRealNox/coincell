@@ -86,6 +86,24 @@ class FakeFirmware(
     /** Attached DMG cartridge; when set, B1/B2/B3/A9 are served from it. */
     var cart: FakeDmgCart? = null
 
+    /** Attached GBA cartridge; when set, C1..C7, CA and D4 are served from it. */
+    var agbCart: FakeAgbCart? = null
+
+    /** Count of A3 (DMG mode) and A5 (5 V) commands received. GBA sessions must keep both at 0. */
+    var a3Count = 0
+        private set
+    var a5Count = 0
+        private set
+
+    /** Fault injection for GBA save reads (C3 / C5): (1-based read number, address, data) -> bytes to send. */
+    var agbReadFilter: ((Int, Int, ByteArray) -> ByteArray)? = null
+    var agbReadCount = 0
+        private set
+
+    /** Fault injection for GBA save data writes (C4 / C6 / C7): (1-based request number, data) -> data the cartridge receives. */
+    var agbWriteFilter: ((Int, ByteArray) -> ByteArray)? = null
+    private var agbDataWrites = 0
+
     /** Count of B3 (DMG_CART_WRITE_SRAM) commands received; must stay 0 during backups. */
     var b3Count = 0
         private set
@@ -143,6 +161,11 @@ class FakeFirmware(
         link.enqueue(b)
     }
 
+    private fun agbDataFilter(data: ByteArray): ByteArray {
+        agbDataWrites++
+        return agbWriteFilter?.invoke(agbDataWrites, data) ?: data
+    }
+
     private fun need(n: Int): Boolean = buf.size >= n
 
     private fun consume(n: Int): ByteArray = buf.copyOf(n).also { buf = buf.copyOfRange(n, buf.size) }
@@ -154,9 +177,10 @@ class FakeFirmware(
         while (buf.isNotEmpty()) {
             when (val op = buf[0].toInt() and 0xFF) {
                 0xA1 -> { consume(1); reply(fwReply) }
-                0xA2, 0xA3, 0xA8, 0xAC, 0xB4, 0xC9 -> { consume(1); reply(1) }
+                0xA2, 0xA3, 0xA8, 0xAC, 0xB4, 0xC9 -> { consume(1); if (op == 0xA3) a3Count++; reply(1) }
                 0xA4, 0xA5 -> {
                     consume(1)
+                    if (op == 0xA5) a5Count++
                     val newVoltage = if (op == 0xA4) "3.3V" else "5V"
                     // Re-asserting the same voltage while powered is harmless; a change is not.
                     if (powered && newVoltage != voltage) voltageChangedWhilePowered = true
@@ -244,17 +268,91 @@ class FakeFirmware(
                     reply(ByteArray(n) { rom.getOrElse(romPos + it) { 0xFF.toByte() } })
                     romPos += n
                 }
-                0xC1 -> {
+                0xC1 -> if (agbCart != null) {
+                    consume(1)
+                    val n = (vars[2 to 0] ?: 0L).toInt()
+                    val c = agbCart!!
+                    reply(ByteArray(n) { c.romByte(address * 2 + it).toByte() })
+                    address += n / 2
+                } else {
                     consume(1)
                     val n = (vars[2 to 0] ?: 0L).toInt()
                     reply(ByteArray(n) { rom.getOrElse(romPos + it) { 0xFF.toByte() } })
                     romPos += n
                 }
-                0xC3 -> {
+                0xC3 -> if (agbCart != null) {
+                    consume(1)
+                    val n = (vars[2 to 0] ?: 0L).toInt()
+                    val c = agbCart!!
+                    agbReadCount++
+                    var data = ByteArray(n) { c.saveRead(address + it).toByte() }
+                    data = agbReadFilter?.invoke(agbReadCount, address, data) ?: data
+                    address += n
+                    reply(data)
+                } else {
                     consume(1)
                     val n = (vars[2 to 0] ?: 0L).toInt()
                     reply(ByteArray(n) { saveWindow.getOrElse(savePos + it) { 0xFF.toByte() } })
                     savePos += n
+                }
+                0xC2 -> {
+                    if (!need(7)) return
+                    val c = consume(7)
+                    agbCart?.romSpaceWrite((u32(c, 1).toInt()) * 2, ((c[5].toInt() and 0xFF) shl 8) or (c[6].toInt() and 0xFF))
+                    reply(1)
+                }
+                0xC4 -> {
+                    val n = (vars[2 to 0] ?: 0L).toInt()
+                    if (!need(1 + n)) return
+                    consume(1)
+                    val data = agbDataFilter(consume(n))
+                    agbCart!!.writes += AgbWrite.SramData(address, n)
+                    agbCart!!.sramWrite(address, data)
+                    address += n
+                    reply(1)
+                }
+                0xC5 -> {
+                    if (!need(2)) return
+                    val c = consume(2)
+                    val n = (vars[2 to 0] ?: 0L).toInt()
+                    val cart = agbCart!!
+                    agbReadCount++
+                    var data = cart.eepromRead(c[1].toInt(), address, n)
+                    data = agbReadFilter?.invoke(agbReadCount, address, data) ?: data
+                    address += n / 8
+                    reply(data)
+                }
+                0xC6 -> {
+                    val n = (vars[2 to 0] ?: 0L).toInt()
+                    if (!need(2 + n)) return
+                    val c = consume(2)
+                    val data = agbDataFilter(consume(n))
+                    agbCart!!.writes += AgbWrite.EepromData(c[1].toInt(), address, n)
+                    agbCart!!.eepromWrite(c[1].toInt(), address, data)
+                    address += n / 8
+                    reply(1)
+                }
+                0xC7 -> {
+                    val n = (vars[2 to 0] ?: 0L).toInt()
+                    if (!need(2 + n)) return
+                    val c = consume(2)
+                    val data = agbDataFilter(consume(n))
+                    agbCart!!.writes += AgbWrite.FlashData(c[1].toInt(), address, n)
+                    agbCart!!.flashData(c[1].toInt(), address, data)
+                    address += if (c[1].toInt() == 2) n / 128 else n
+                    reply(1)
+                }
+                0xCA -> { consume(1); reply(agbCart?.gpioRtcReply() ?: ByteArray(8)) }
+                0xD4 -> {
+                    if (!need(3)) return
+                    val n = buf[2].toInt() and 0xFF
+                    if (!need(3 + n * 6)) return
+                    val c = consume(3 + n * 6)
+                    val cmds = (0 until n).map { i -> u32(c, 3 + i * 6).toInt() to (((c[7 + i * 6].toInt() and 0xFF) shl 8) or (c[8 + i * 6].toInt() and 0xFF)) }
+                    val cart = agbCart!!
+                    cart.writes += AgbWrite.FlashCmds(cmds)
+                    cmds.forEach { (a, v) -> cart.flashCommand(a, v) }
+                    reply(1)
                 }
                 else -> error("FakeFirmware: unknown opcode 0x%02X".format(op))
             }
