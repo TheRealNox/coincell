@@ -161,10 +161,11 @@ fun AppShell(
     }
 
     fun openTab(tab: Tab) {
+        // Always land on the tab's root page: clear whatever sub-screens are open, and don't save or restore
+        // per-tab back stacks.
         nav.navigate(tab.route) {
-            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+            popUpTo(nav.graph.findStartDestination().id)
             launchSingleTop = true
-            restoreState = true
         }
     }
 
