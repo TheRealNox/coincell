@@ -6,12 +6,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -187,10 +186,12 @@ fun PartyStrip(snapshot: SaveSnapshot, onOpen: (SlotRef) -> Unit) {
         Text("The party is empty.", style = MaterialTheme.typography.bodyMedium)
         return
     }
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        itemsIndexed(snapshot.party) { i, p ->
-            PokemonTile(p, selected = false, onClick = { onOpen(SlotRef.Party(i)) }, onLongClick = null)
+    // Six equal columns (the party size), so tiles line up and spread across the card whatever the party size.
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        snapshot.party.forEachIndexed { i, p ->
+            PokemonTile(p, selected = false, onClick = { onOpen(SlotRef.Party(i)) }, onLongClick = null, modifier = Modifier.weight(1f))
         }
+        repeat((PARTY_SLOTS - snapshot.party.size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
     }
 }
 
@@ -322,3 +323,6 @@ fun EditorTrainerScreen(vm: EditorViewModel, actions: EditorActions, onBack: () 
         }
     }
 }
+
+/** Gen 1/2 party size. */
+private const val PARTY_SLOTS = 6

@@ -8,18 +8,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -86,10 +85,12 @@ fun PokemonTile(
         border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
     ) {
         Box {
-            Column(Modifier.padding(horizontal = 2.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            // fillMaxWidth: the column spans the tile, so the sprite and labels centre in it whatever their widths.
+            Column(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 PokemonSpriteView(p, height = 48.dp)
                 Text(
                     if (p.isEgg) "Egg" else p.speciesName,
+                    modifier = Modifier.fillMaxWidth(),
                     style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -97,8 +98,10 @@ fun PokemonTile(
                 )
                 Text(
                     if (p.isEgg) " " else "Lv ${p.level}",
+                    modifier = Modifier.fillMaxWidth(),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
                 )
             }
             if (p.isShiny && !p.isEgg) {
@@ -301,15 +304,17 @@ private fun PartyRow(
     tap: (SlotRef, Boolean) -> Unit,
     onLongPress: (SlotRef) -> Unit,
 ) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        itemsIndexed(snapshot.party) { i, p ->
+    // One equal-width column per party slot, spanning the screen like the box grid below.
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        snapshot.party.forEachIndexed { i, p ->
             val ref = SlotRef.Party(i)
-            PokemonTile(p, selected = moving == ref, onClick = { tap(ref, true) }, onLongClick = { onLongPress(ref) })
+            PokemonTile(p, selected = moving == ref, onClick = { tap(ref, true) }, onLongClick = { onLongPress(ref) }, modifier = Modifier.weight(1f))
         }
         if (snapshot.party.size < capacity) {
             val ref = SlotRef.Party(snapshot.party.size)
-            item { EmptyTile({ tap(ref, false) }, Modifier.width(68.dp), forMove = moving != null) }
+            EmptyTile({ tap(ref, false) }, Modifier.weight(1f), forMove = moving != null)
         }
+        repeat((capacity - snapshot.party.size - 1).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
     }
 }
 
