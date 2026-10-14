@@ -142,6 +142,8 @@ internal class DmgSaveRestore(
                 done += len
                 onProgress(RestorePhase.WRITE, done, size.toLong())
             }
+            // One summary line per bank: the raw B3 traffic scrolls out of the bounded debug log.
+            log("Wrote RAM bank $bank: $bankEnd bytes in ${(bankEnd + REQUEST - 1) / REQUEST} requests, all acknowledged")
         }
         var rtcWritten: RtcTime? = null
         var rtcError: String? = null

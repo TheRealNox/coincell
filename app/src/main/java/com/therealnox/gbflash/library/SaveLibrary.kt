@@ -11,7 +11,6 @@ import java.nio.file.StandardCopyOption
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.TimeZone
 import java.util.zip.CRC32
 
 /** Where a library entry came from. A missing `kind` in `backup.json` (milestone 2 entries) means [BACKUP]. */
@@ -239,7 +238,8 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
     }
 
     private fun uniqueId(gameDir: File, now: Long): String {
-        val fmt = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+        // Local time, so ids match the times shown in the app; the timestamp field stays authoritative.
+        val fmt = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
         val base = fmt.format(Date(now))
         var id = base
         var n = 2

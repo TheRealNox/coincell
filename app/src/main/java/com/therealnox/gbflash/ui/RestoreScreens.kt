@@ -287,7 +287,7 @@ private fun ConfirmStep(ui: RestoreUi.Confirm, vm: MainViewModel) {
             Text("Safety copy ready", style = MaterialTheme.typography.titleMedium)
             Text(
                 if (ui.safety.reusedExisting) {
-                    "The cartridge still holds exactly ${safety.id} (read twice and compared), so no new copy was needed."
+                    "The cartridge holds exactly the save of ${safety.id} (read twice and compared), so that backup is the safety copy and no new copy was needed."
                 } else {
                     "The current save was backed up as ${safety.id} (CRC32 %08X, ${RestorePolicy.formatSize(safety.size)}, verified).".format(safety.crc32)
                 },

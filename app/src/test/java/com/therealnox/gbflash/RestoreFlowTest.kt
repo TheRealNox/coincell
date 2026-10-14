@@ -94,6 +94,34 @@ class RestoreFlowTest {
     }
 
     @Test
+    fun safetyCopy_reusesAnIdenticalLibraryEntryInsteadOfStoringADuplicate() {
+        val r = rig()
+        val e = env(r)
+        val sameAsCart = e.store(r.sramBefore.copyOf())
+        val req = e.request(e.store(testSave(0x8000, 50)))
+
+        val s = e.safety(req) as SafetyCopy.Ready
+        assertTrue(s.reusedExisting)
+        assertEquals(sameAsCart.id, s.entry.id)
+        assertTrue("no new pre-restore copy", e.library.list(r.game.key).none { it.kind == BackupKind.PRE_RESTORE })
+        assertEquals(2, e.library.list(r.game.key).size)
+        assertEquals(RestoreStatus.VERIFIED, e.write(req, s).status)
+    }
+
+    @Test
+    fun safetyCopy_doesNotReuseAnIdenticalSaveThatLacksTheClock() {
+        val r = rig(type = 0x10, mapper = FakeMapper.MBC3, rtc = true)
+        val e = env(r)
+        e.store(r.sramBefore.copyOf()) // same bytes, but stored without rtc.bin
+        val req = e.request(e.store(testSave(0x8000, 50)))
+
+        val s = e.safety(req) as SafetyCopy.Ready
+        assertFalse(s.reusedExisting)
+        assertEquals(BackupKind.PRE_RESTORE, s.entry.kind)
+        assertTrue(s.entry.rtcIncluded)
+    }
+
+    @Test
     fun safetyCopy_isFullyReadBeforeTheFirstB3() {
         val r = rig()
         val e = env(r)

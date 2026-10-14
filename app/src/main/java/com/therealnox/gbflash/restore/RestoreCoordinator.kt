@@ -17,7 +17,6 @@ import com.therealnox.gbflash.save.VerifiedRamReader
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.TimeZone
 
 /** A restore the user has reviewed. */
 class RestoreRequest(
@@ -114,6 +113,15 @@ class RestoreCoordinator internal constructor(
             if (known != null && sameContent(known, result.data, plan)) {
                 log("Cartridge still holds ${known.id}; no new safety copy needed")
                 return SafetyCopy.Ready(known, true, review.header, source.id)
+            }
+            // Avoid piling up identical copies: if the library already holds this exact save (and the
+            // clock values when the cartridge has one), that entry is the safety copy.
+            val existing = library.list(review.cartGame.key).firstOrNull { entry ->
+                (result.rtc == null || entry.rtcIncluded) && sameContent(entry, result.data, plan)
+            }
+            if (existing != null) {
+                log("Cartridge save is identical to ${existing.id}; using it as the safety copy")
+                return SafetyCopy.Ready(existing, true, review.header, source.id)
             }
             val entry = library.store(
                 review.cartGame,
@@ -262,5 +270,5 @@ class RestoreCoordinator internal constructor(
     }
 
     private fun formatDate(millis: Long): String =
-        SimpleDateFormat("yyyy-MM-dd HH:mm 'UTC'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(millis))
+        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(millis))
 }
