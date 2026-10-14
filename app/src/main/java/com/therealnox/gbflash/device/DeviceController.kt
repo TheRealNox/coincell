@@ -1,6 +1,7 @@
 package com.therealnox.gbflash.device
 
 import com.therealnox.gbflash.cart.AgbDatabase
+import com.therealnox.gbflash.cart.DmgDatabase
 import com.therealnox.gbflash.cart.AgbHeader
 import com.therealnox.gbflash.cart.AgbRtcSnapshot
 import com.therealnox.gbflash.cart.AgbSaveDetection
@@ -69,6 +70,8 @@ class DeviceController(
     private val idlePowerOffMillis: Long = DEFAULT_IDLE_POWER_OFF_MS,
     /** FlashGBX's GBA database (save type lookup by header SHA-1). */
     private val agbDatabase: AgbDatabase = AgbDatabase.EMPTY,
+    /** FlashGBX's GB/GBC database (friendly default name by header SHA-1). */
+    private val dmgDatabase: DmgDatabase = DmgDatabase.EMPTY,
 ) {
     private val _state = MutableStateFlow(DeviceState())
     val state: StateFlow<DeviceState> = _state
@@ -215,7 +218,9 @@ class DeviceController(
                     plan = p
                     available = p is BackupPlan.Ready
                     reason = (p as? BackupPlan.Unavailable)?.reason
-                    cartGame = GameInfo.fromDmg(header).also { game = it }
+                    val dbName = dmgDatabase.lookup(header)?.name
+                    debugLog.add("Database: ${dbName ?: "no entry"}")
+                    cartGame = GameInfo.fromDmg(header, databaseName = dbName).also { game = it }
                 } else if (header is AgbHeader && platform == CartPlatform.GBA) {
                     // Detection order (a) patch marker, (b) FlashGBX database; (c) probing is the user's explicit choice.
                     val detection = AgbSaveDetection.fromHeader(header, agbDatabase)

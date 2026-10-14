@@ -384,7 +384,7 @@ fun AboutScreen(versionName: String, onBack: () -> Unit, onFirmware: () -> Unit)
             )
             Text("GBA cartridge database (GPL-3.0)", style = MaterialTheme.typography.titleSmall)
             Text(
-                "The GBA save type lookup uses a reduced copy of FlashGBX's db_AGB.json (config/db_AGB.json), (c) Lesserkuma and the FlashGBX contributors, GPL-3.0.",
+                "The GBA save type lookup and the default game names use reduced copies of FlashGBX's db_AGB.json and db_DMG.json (config/), (c) Lesserkuma and the FlashGBX contributors, GPL-3.0.",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text("usb-serial-for-android by Mike Wakerly and contributors (MIT)", style = MaterialTheme.typography.titleSmall)

@@ -1,6 +1,7 @@
 package com.therealnox.gbflash
 
 import com.therealnox.gbflash.cart.AgbHeader
+import com.therealnox.gbflash.cart.DmgDatabase
 import com.therealnox.gbflash.cart.DmgHeader
 import com.therealnox.gbflash.library.BackupEntry
 import com.therealnox.gbflash.library.GameInfo
@@ -55,10 +56,32 @@ class GameNamesTest {
     }
 
     @Test
-    fun label_blankCustomNameCountsAsNotSet_andGbIgnoresDatabaseName() {
+    fun label_blankCustomNameCountsAsNotSet_andGbUsesDatabaseNameToo() {
         assertEquals("PM_CRYSTAL", crystal.copy(displayName = "   ").label)
-        assertEquals("PM_CRYSTAL", crystal.copy(databaseName = "Something else").label)
+        assertEquals("Pokemon - Version Cristal (France)", crystal.copy(databaseName = "Pokemon - Version Cristal (France)").label)
+        assertEquals("PM_CRYSTAL", crystal.copy(databaseName = "Pokemon - Version Cristal (France)").secondaryTitle)
         assertEquals("(untitled)", crystal.copy(title = "").label)
+    }
+
+    @Test
+    fun dmgDatabase_looksUpByHeaderSha1_andFeedsTheDefaultName() {
+        val raw = dmgHeader("PM_CRYSTAL".toByteArray(), cgbFlag = 0xC0, cartType = 0x10)
+        val key = java.security.MessageDigest.getInstance("SHA-1").digest(raw.copyOfRange(0, 0x180)).joinToString("") { "%02x".format(it) }
+        val db = DmgDatabase.parse("# comment\n$key\tCGB-BYTF\tPokemon - Version Cristal (France)\nbadline\n".byteInputStream())
+        val header = DmgHeader.parse(raw)
+        val name = db.lookup(header)?.name
+        assertEquals("Pokemon - Version Cristal (France)", name)
+        assertEquals("Pokemon - Version Cristal (France)", GameInfo.fromDmg(header, databaseName = name).label)
+        assertNull(DmgDatabase.EMPTY.lookup(header))
+        assertEquals(GameInfo.fromDmg(header).key, GameInfo.fromDmg(header, databaseName = name).key)
+    }
+
+    @Test
+    fun bundledDmgDatabase_hasTheUsersGames() {
+        val f = java.io.File("src/main/assets/db_dmg.tsv")
+        org.junit.Assume.assumeTrue(f.isFile)
+        val db = f.inputStream().use(DmgDatabase::parse)
+        assertTrue(db.size > 3000)
     }
 
     @Test

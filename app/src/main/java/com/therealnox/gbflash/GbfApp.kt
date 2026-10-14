@@ -2,6 +2,7 @@ package com.therealnox.gbflash
 
 import android.app.Application
 import com.therealnox.gbflash.cart.AgbDatabase
+import com.therealnox.gbflash.cart.DmgDatabase
 import com.therealnox.gbflash.library.LibraryStore
 import com.therealnox.gbflash.library.SaveLibrary
 import com.therealnox.gbflash.sprites.SpriteStore
@@ -27,6 +28,15 @@ class GbfApp : Application() {
             assets.open("db_agb.tsv").use { AgbDatabase.parse(it) }
         } catch (_: Exception) {
             AgbDatabase.EMPTY
+        }
+    }
+
+    /** FlashGBX GB/GBC database (assets/db_dmg.tsv, GPL-3.0), for friendly default names. Empty if unreadable. */
+    val dmgDatabase: DmgDatabase by lazy {
+        try {
+            assets.open("db_dmg.tsv").use { DmgDatabase.parse(it) }
+        } catch (_: Exception) {
+            DmgDatabase.EMPTY
         }
     }
 

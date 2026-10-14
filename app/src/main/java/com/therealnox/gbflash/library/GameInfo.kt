@@ -23,12 +23,12 @@ data class GameInfo(
      * key, the folder name or any restore matching rule.
      */
     val displayName: String? = null,
-    /** GBA: the FlashGBX database name seen when a backup was stored (`databaseName` in `game.json`), also usable offline. */
+    /** The FlashGBX database name (GB/GBC or GBA) seen when a backup was stored (`databaseName` in `game.json`), also usable offline. */
     val databaseName: String? = null,
 ) {
-    /** The label without a custom name: the FlashGBX database name for GBA, otherwise the header title. */
+    /** The label without a custom name: the FlashGBX database name when known, otherwise the header title. */
     val defaultLabel: String
-        get() = (if (platform == "AGB") databaseName?.trim()?.ifEmpty { null } else null) ?: title.ifBlank { "(untitled)" }
+        get() = databaseName?.trim()?.ifEmpty { null } ?: title.ifBlank { "(untitled)" }
 
     /** The one label shown everywhere: custom name, else [defaultLabel]. */
     val label: String get() = displayName?.trim()?.ifEmpty { null } ?: defaultLabel
@@ -73,7 +73,7 @@ data class GameInfo(
             "${platform}_${sanitizeTitle(title)}_%04X".format(checksum and 0xFFFF)
 
         /** Identity of a GB / GBC cartridge: platform + cleaned title + stored global checksum (0x14E). */
-        fun fromDmg(h: DmgHeader): GameInfo = GameInfo(
+        fun fromDmg(h: DmgHeader, databaseName: String? = null): GameInfo = GameInfo(
             platform = "DMG",
             title = h.title,
             key = makeKey("DMG", h.title, h.globalChecksumStored),
@@ -82,6 +82,7 @@ data class GameInfo(
             globalChecksum = h.globalChecksumStored,
             headerChecksum = h.headerChecksumStored,
             gameCode = h.gameCode,
+            databaseName = normalizeName(databaseName),
         )
 
         /**
