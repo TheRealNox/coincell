@@ -1,5 +1,7 @@
 package com.therealnox.gbflash.library
 
+import com.therealnox.gbflash.editor.PokemonSaveKind
+import com.therealnox.gbflash.editor.PokemonSaveProbe
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -114,6 +116,36 @@ class LibraryStore(
             if (undo) undoDelete(entry) else withContext(NonCancellable) { commitDelete(entry) }
         }
     }
+
+    /**
+     * Stores an edited save as a new `edited` entry next to [parent] (see [SaveLibrary.storeEdited]); the parent is
+     * never modified. Returns the new entry once the list has been refreshed.
+     */
+    suspend fun storeEdited(parent: BackupEntry, save: ByteArray, note: String, appVersion: String): BackupEntry {
+        val stored = withContext(io) { library.storeEdited(parent, save, note.trim().take(NOTE_MAX_LENGTH), appVersion) }
+        reload()
+        return stored
+    }
+
+    /** The raw `.sav` of [entry] (CRC checked). */
+    suspend fun readSave(entry: BackupEntry): ByteArray = withContext(io) { library.readSave(entry) }
+
+    /**
+     * Whether [entry] of [game] opens in the Pokemon editor. Cheap (one parse of a 32 KiB save) and cached per
+     * backup, so screens can call it freely.
+     */
+    suspend fun probePokemon(game: GameInfo, entry: BackupEntry): PokemonSaveKind {
+        val cacheKey = "${entry.gameKey}/${entry.id}/${entry.crc32}"
+        probeCache[cacheKey]?.let { return it }
+        val result = withContext(io) {
+            val quick = PokemonSaveProbe.byGame(game)
+            if (quick != null) quick else PokemonSaveProbe.probe(game, runCatching { library.readSave(entry) }.getOrNull())
+        }
+        probeCache[cacheKey] = result
+        return result
+    }
+
+    private val probeCache = java.util.concurrent.ConcurrentHashMap<String, PokemonSaveKind>()
 
     /** Reads the `.sav` bytes for export. */
     suspend fun exportBytes(entry: BackupEntry, includeRtc: Boolean): ByteArray = withContext(io) { library.exportBytes(entry, includeRtc) }

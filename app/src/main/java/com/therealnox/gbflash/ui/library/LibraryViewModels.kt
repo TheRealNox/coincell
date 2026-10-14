@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.therealnox.gbflash.device.ConnectionStatus
 import com.therealnox.gbflash.device.DeviceState
+import com.therealnox.gbflash.editor.PokemonSaveKind
 import com.therealnox.gbflash.library.BackupEntry
 import com.therealnox.gbflash.library.GameSummary
 import com.therealnox.gbflash.library.LibraryQuery
@@ -16,6 +17,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 
@@ -73,6 +78,8 @@ data class GameDetailUi(
     val inReader: Boolean = false,
     /** "Back up this cart" is possible: this game's cartridge is read, powered and backup-capable. */
     val canBackupCart: Boolean = false,
+    /** Whether the newest backups are a Pokemon save the editor opens; null until probed. */
+    val pokemon: PokemonSaveKind? = null,
 )
 
 class GameDetailViewModel(
@@ -80,7 +87,30 @@ class GameDetailViewModel(
     store: LibraryStore,
     deviceState: StateFlow<DeviceState>,
 ) : ViewModel() {
-    val ui: StateFlow<GameDetailUi> = combine(store.state, deviceState) { library, device ->
+    private val pokemon = MutableStateFlow<PokemonSaveKind?>(null)
+
+    init {
+        // The newest few backups are tried (the newest one may be an empty save); each answer is cached by the store.
+        viewModelScope.launch {
+            store.state
+                .map { (it as? LibraryState.Loaded)?.games?.firstOrNull { g -> g.key == gameKey } }
+                .filterNotNull()
+                .distinctUntilChangedBy { g -> g.backups.take(PROBE_COUNT).map { it.id } }
+                .collect { g ->
+                    var found: PokemonSaveKind = PokemonSaveKind.NotSupported
+                    for (e in g.backups.take(PROBE_COUNT)) {
+                        val kind = store.probePokemon(g.game, e)
+                        if (kind !is PokemonSaveKind.NotSupported) {
+                            found = kind
+                            break
+                        }
+                    }
+                    pokemon.value = found
+                }
+        }
+    }
+
+    val ui: StateFlow<GameDetailUi> = combine(store.state, deviceState, pokemon) { library, device, pk ->
         val game = (library as? LibraryState.Loaded)?.games?.firstOrNull { it.key == gameKey }
         val here = inReaderKey(device) == gameKey
         GameDetailUi(
@@ -88,8 +118,13 @@ class GameDetailViewModel(
             game = game,
             inReader = here,
             canBackupCart = here && device.backupAvailable && !device.busy && device.restore == null && !device.backupRunning,
+            pokemon = pk,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, GameDetailUi())
+
+    private companion object {
+        const val PROBE_COUNT = 3
+    }
 }
 
 data class BackupDetailUi(
@@ -102,6 +137,8 @@ data class BackupDetailUi(
     val restoreReason: String? = null,
     /** The cartridge in the reader is a different game than this backup (restore will need a typed title). */
     val otherGameInReader: Boolean = false,
+    /** Whether this backup opens in the Pokemon editor; null until probed. */
+    val pokemon: PokemonSaveKind? = null,
 )
 
 class BackupDetailViewModel(
@@ -110,7 +147,22 @@ class BackupDetailViewModel(
     private val store: LibraryStore,
     deviceState: StateFlow<DeviceState>,
 ) : ViewModel() {
-    val ui: StateFlow<BackupDetailUi> = combine(store.state, deviceState) { library, device ->
+    private val pokemon = MutableStateFlow<PokemonSaveKind?>(null)
+
+    init {
+        viewModelScope.launch {
+            store.state
+                .map { (it as? LibraryState.Loaded)?.games?.firstOrNull { g -> g.key == gameKey } }
+                .filterNotNull()
+                .distinctUntilChangedBy { g -> g.backups.firstOrNull { it.id == backupId }?.crc32 }
+                .collect { g ->
+                    val entry = g.backups.firstOrNull { it.id == backupId }
+                    if (entry != null) pokemon.value = store.probePokemon(g.game, entry)
+                }
+        }
+    }
+
+    val ui: StateFlow<BackupDetailUi> = combine(store.state, deviceState, pokemon) { library, device, pk ->
         val game = (library as? LibraryState.Loaded)?.games?.firstOrNull { it.key == gameKey }
         val readerKey = inReaderKey(device)
         BackupDetailUi(
@@ -120,6 +172,7 @@ class BackupDetailViewModel(
             restoreAvailable = device.restoreAvailable,
             restoreReason = device.restoreUnavailableReason,
             otherGameInReader = readerKey != null && readerKey != gameKey,
+            pokemon = pk,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, BackupDetailUi())
 

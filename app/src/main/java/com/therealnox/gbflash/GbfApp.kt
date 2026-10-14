@@ -4,6 +4,7 @@ import android.app.Application
 import com.therealnox.gbflash.cart.AgbDatabase
 import com.therealnox.gbflash.library.LibraryStore
 import com.therealnox.gbflash.library.SaveLibrary
+import com.therealnox.gbflash.sprites.SpriteStore
 import com.therealnox.gbflash.ui.settings.AppPrefs
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +29,9 @@ class GbfApp : Application() {
             AgbDatabase.EMPTY
         }
     }
+
+    /** The optional Pokemon sprite pack (pkassets/): decoded sprites, or null results when the pack is not in the app. */
+    val sprites: SpriteStore by lazy { SpriteStore(assets) }
 
     val versionName: String
         get() = try {

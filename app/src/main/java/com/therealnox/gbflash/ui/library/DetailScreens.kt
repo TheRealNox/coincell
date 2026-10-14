@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CatchingPokemon
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.IosShare
@@ -50,6 +51,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.therealnox.gbflash.editor.PokemonSaveKind
 import com.therealnox.gbflash.library.BackupEntry
 import com.therealnox.gbflash.library.BackupKind
 import com.therealnox.gbflash.library.GameSummary
@@ -151,6 +153,7 @@ private fun IdentityCard(game: GameSummary, ui: GameDetailUi, onBackupCart: () -
                 if (ui.inReader) InReaderChip()
                 if (game.hasClock) NeutralChip("Clock", Icons.Filled.Schedule)
             }
+            PokemonChip(ui.pokemon)
             if (ui.canBackupCart) {
                 Button(onClick = onBackupCart, Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Icon(Icons.Filled.Download, contentDescription = null, Modifier.size(18.dp))
@@ -235,6 +238,7 @@ fun BackupDetailScreen(
     vm: BackupDetailViewModel,
     onBack: () -> Unit,
     onRestore: (BackupEntry) -> Unit,
+    onOpenEditor: () -> Unit,
 ) {
     val ui by vm.ui.collectAsState()
     val shell = LocalShell.current
@@ -273,6 +277,7 @@ fun BackupDetailScreen(
                 }
             }
             BackupChips(entry)
+            PokemonChip(ui.pokemon)
             entry.suspectReason?.let {
                 StatusCard("This save looks empty", it, Severity.WARNING)
             }
@@ -297,8 +302,20 @@ fun BackupDetailScreen(
                             BackupKind.BACKUP -> "Cartridge read, every block read twice"
                             BackupKind.PRE_RESTORE -> "Automatic safety copy before a restore"
                             BackupKind.IMPORTED -> "Imported from ${entry.originalFileName ?: "a file"}, never compared with a cartridge"
+                            BackupKind.EDITED -> "Edited in the Pokemon editor, never read from a cartridge"
                         },
                     )
+                    if (entry.kind == BackupKind.EDITED) {
+                        val parent = entry.parentId?.let { id -> game.backups.firstOrNull { it.id == id } }
+                        KeyValueRow(
+                            "Based on",
+                            when {
+                                parent != null -> "Backup of ${formatDateTime(parent.timestampMillis)}"
+                                entry.parentId != null -> "A backup that was deleted (${entry.parentId})"
+                                else -> "Unknown"
+                            },
+                        )
+                    }
                     if (entry.firmware.isNotEmpty()) KeyValueRow("Reader", entry.firmware)
                     KeyValueRow("App", entry.appVersion.ifEmpty { "unknown" })
                     KeyValueRow("Backup id", entry.id, mono = true)
@@ -318,6 +335,18 @@ fun BackupDetailScreen(
                         Icon(Icons.Filled.Edit, contentDescription = if (entry.note.isEmpty()) "Add note" else "Edit note")
                     }
                 }
+            }
+            when (ui.pokemon) {
+                is PokemonSaveKind.Gen12 -> Button(onClick = onOpenEditor, Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                    Icon(Icons.Filled.CatchingPokemon, contentDescription = null, Modifier.size(18.dp))
+                    Text("Open in Pokemon editor", Modifier.padding(start = 8.dp))
+                }
+                PokemonSaveKind.GbaLater -> Text(
+                    "Pokemon editor for GBA games comes later",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                else -> Unit
             }
             FilledTonalButton(onClick = { actions.export(entry) }, Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                 Icon(Icons.Filled.IosShare, contentDescription = null, Modifier.size(18.dp))
@@ -362,6 +391,16 @@ fun BackupDetailScreen(
                 },
             )
         }
+    }
+}
+
+/** "Pokemon save, Gen 2, Crystal French" for a Gen 1/2 save, a short note for a GBA Pokemon game, nothing otherwise. */
+@Composable
+private fun PokemonChip(kind: PokemonSaveKind?) {
+    when (kind) {
+        is PokemonSaveKind.Gen12 -> NeutralChip(kind.info.chipText, Icons.Filled.CatchingPokemon)
+        PokemonSaveKind.GbaLater -> NeutralChip("Pokemon GBA (editor comes later)", Icons.Filled.CatchingPokemon)
+        else -> Unit
     }
 }
 

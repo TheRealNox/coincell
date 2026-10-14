@@ -48,6 +48,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavGraphBuilder
+import androidx.navigation.NavHostController
 import androidx.navigation.toRoute
 import com.therealnox.gbflash.device.BackupUi
 import com.therealnox.gbflash.device.DeviceController
@@ -70,6 +73,11 @@ import com.therealnox.gbflash.ui.nav.BackupFlowRoute
 import com.therealnox.gbflash.ui.nav.BackupRoute
 import com.therealnox.gbflash.ui.nav.DebugLogRoute
 import com.therealnox.gbflash.ui.nav.DeviceRoute
+import com.therealnox.gbflash.ui.nav.EditorBagRoute
+import com.therealnox.gbflash.ui.nav.EditorBoxesRoute
+import com.therealnox.gbflash.ui.nav.EditorPokemonRoute
+import com.therealnox.gbflash.ui.nav.EditorRoute
+import com.therealnox.gbflash.ui.nav.EditorTrainerRoute
 import com.therealnox.gbflash.ui.nav.FirmwareRoute
 import com.therealnox.gbflash.ui.nav.GameRoute
 import com.therealnox.gbflash.ui.nav.GbaProbeRoute
@@ -77,6 +85,14 @@ import com.therealnox.gbflash.ui.nav.LibraryRoute
 import com.therealnox.gbflash.ui.nav.RawHeaderRoute
 import com.therealnox.gbflash.ui.nav.RestoreRoute
 import com.therealnox.gbflash.ui.nav.SettingsRoute
+import com.therealnox.gbflash.ui.editor.EditorActions
+import com.therealnox.gbflash.ui.editor.EditorBagScreen
+import com.therealnox.gbflash.ui.editor.EditorBoxesScreen
+import com.therealnox.gbflash.ui.editor.EditorOverviewScreen
+import com.therealnox.gbflash.ui.editor.EditorPokemonScreen
+import com.therealnox.gbflash.ui.editor.EditorTrainerScreen
+import com.therealnox.gbflash.ui.editor.EditorViewModel
+import com.therealnox.gbflash.pkcore.SlotRef
 import com.therealnox.gbflash.ui.restore.RestoreScreen
 import com.therealnox.gbflash.ui.settings.AboutScreen
 import com.therealnox.gbflash.ui.settings.AdvancedScreen
@@ -249,6 +265,66 @@ fun AppShell(
     }
 }
 
+/**
+ * The Pokemon editor destinations. They all use the ViewModel of the [EditorRoute] entry (the overview), which is
+ * the working copy of the save and lives as long as the editor is on the back stack.
+ */
+private fun androidx.navigation.NavGraphBuilder.editorGraph(
+    nav: androidx.navigation.NavHostController,
+    device: DeviceController,
+    store: LibraryStore,
+    appVersion: String,
+) {
+    @Composable
+    fun rememberEditorVm(entry: androidx.navigation.NavBackStackEntry): EditorViewModel {
+        // The editor's own entry owns the ViewModel; the sub-screens above it borrow it.
+        val owner = if (entry.destination.hasRoute<EditorRoute>()) entry else remember(entry) { nav.getBackStackEntry<EditorRoute>() }
+        val route = owner.toRoute<EditorRoute>()
+        return viewModel(
+            viewModelStoreOwner = owner,
+            factory = viewModelFactory { initializer { EditorViewModel(route.gameKey, route.backupId, store, appVersion) } },
+        )
+    }
+
+    val actions = EditorActions(
+        onClose = { nav.popBackStack<EditorRoute>(inclusive = true) },
+        onRestore = { e ->
+            device.startRestore(e)
+            nav.navigate(RestoreRoute) { launchSingleTop = true }
+        },
+        onViewHistory = { e ->
+            nav.popBackStack<EditorRoute>(inclusive = true)
+            nav.navigate(BackupRoute(e.gameKey, e.id))
+        },
+    )
+    composable<EditorRoute> { entry ->
+        val vm = rememberEditorVm(entry)
+        EditorOverviewScreen(
+            vm,
+            actions,
+            onOpenBoxes = { nav.navigate(EditorBoxesRoute) },
+            onOpenPokemon = { slot -> nav.navigate(slot.toRoute()) },
+            onOpenBag = { nav.navigate(EditorBagRoute) },
+            onOpenTrainer = { nav.navigate(EditorTrainerRoute) },
+        )
+    }
+    composable<EditorBoxesRoute> { entry ->
+        EditorBoxesScreen(rememberEditorVm(entry), actions, onBack = { nav.popBackStack() }, onOpenPokemon = { slot -> nav.navigate(slot.toRoute()) })
+    }
+    composable<EditorPokemonRoute> { entry ->
+        val route = entry.toRoute<EditorPokemonRoute>()
+        val slot = if (route.box < 0) SlotRef.Party(route.index) else SlotRef.Box(route.box, route.index)
+        EditorPokemonScreen(rememberEditorVm(entry), actions, slot, onBack = { nav.popBackStack() })
+    }
+    composable<EditorBagRoute> { entry -> EditorBagScreen(rememberEditorVm(entry), actions, onBack = { nav.popBackStack() }) }
+    composable<EditorTrainerRoute> { entry -> EditorTrainerScreen(rememberEditorVm(entry), actions, onBack = { nav.popBackStack() }) }
+}
+
+private fun SlotRef.toRoute(): EditorPokemonRoute = when (this) {
+    is SlotRef.Party -> EditorPokemonRoute(-1, index)
+    is SlotRef.Box -> EditorPokemonRoute(box, index)
+}
+
 @Composable
 private fun AppNavHost(
     nav: androidx.navigation.NavHostController,
@@ -360,8 +436,10 @@ private fun AppNavHost(
                     device.startRestore(e)
                     nav.navigate(RestoreRoute) { launchSingleTop = true }
                 },
+                onOpenEditor = { nav.navigate(EditorRoute(route.gameKey, route.backupId)) },
             )
         }
+        editorGraph(nav, device, store, versionName)
         composable<BackupFlowRoute> {
             BackupFlowScreen(
                 onClose = { nav.popBackStack() },

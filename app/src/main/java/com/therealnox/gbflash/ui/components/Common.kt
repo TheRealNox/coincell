@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
@@ -165,9 +166,14 @@ fun BackupChips(e: BackupEntry, modifier: Modifier = Modifier) {
                 "Imported", Icons.Filled.Download,
                 MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            BackupKind.EDITED -> StatusChip(
+                "Edited", Icons.Filled.Edit,
+                MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer,
+            )
             BackupKind.BACKUP -> Unit
         }
-        if (!e.verified && e.kind != BackupKind.IMPORTED) WarningChip("Unverified")
+        // Imported and edited saves were never read from a cartridge, so "unverified" would say nothing.
+        if (!e.verified && e.kind != BackupKind.IMPORTED && e.kind != BackupKind.EDITED) WarningChip("Unverified")
     }
 }
 

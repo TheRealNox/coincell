@@ -21,6 +21,9 @@ enum class BackupKind(val json: String, val label: String) {
     BACKUP("backup", "Backup"),
     PRE_RESTORE("pre-restore", "Pre-restore copy"),
     IMPORTED("imported", "Imported"),
+
+    /** Written by the Pokemon editor from another entry ([BackupEntry.parentId]); never read from a cartridge. */
+    EDITED("edited", "Edited"),
     ;
 
     companion object {
@@ -50,6 +53,8 @@ class NewBackup(
     val saveTypeSource: SaveTypeSource? = null,
     /** GBA Flash only: the chip the backup was made from, as text. */
     val flashChip: String? = null,
+    /** Id of the entry this one was made from (kind [BackupKind.EDITED]), in the same game. */
+    val parentId: String? = null,
 )
 
 /** One line of `restores.json`: what a restore attempt did to a cartridge. */
@@ -86,6 +91,8 @@ class BackupEntry(
     val saveType: Int? = null,
     val saveTypeSource: SaveTypeSource? = null,
     val flashChip: String? = null,
+    /** Kind [BackupKind.EDITED]: the id of the backup this one was edited from (it may have been deleted since). */
+    val parentId: String? = null,
 ) {
     /** The stored clock of either platform. */
     val clock: ClockValues? get() = rtc ?: agbRtc
@@ -126,6 +133,35 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
             throw e
         }
         return readEntry(File(gameDir, id), game.key) ?: throw IOException("Stored backup cannot be read back")
+    }
+
+    /**
+     * Stores [save] (the exported result of an edit) as a NEW entry of [parent]'s game: kind [BackupKind.EDITED],
+     * [BackupEntry.parentId] = the parent, the parent's `rtc.bin` copied unchanged (the clock is not part of the save data).
+     * The parent entry is never touched. Not verified (nothing was read from a cartridge).
+     */
+    @Synchronized
+    fun storeEdited(parent: BackupEntry, save: ByteArray, note: String, appVersion: String): BackupEntry {
+        val game = readGame(parent.gameKey) ?: throw IOException("The game of the backup ${parent.id} is missing from the library")
+        return store(
+            game,
+            NewBackup(
+                save = save,
+                rtcFooter = readRtcFooter(parent),
+                rtcProbePresent = parent.rtcProbePresent,
+                rtcDeclared = parent.rtcDeclared,
+                firmware = "",
+                appVersion = appVersion,
+                verified = false,
+                suspectReason = null,
+                note = note,
+                kind = BackupKind.EDITED,
+                saveType = parent.saveType,
+                saveTypeSource = parent.saveTypeSource,
+                flashChip = parent.flashChip,
+                parentId = parent.id,
+            ),
+        )
     }
 
     /** Backups of [gameKey], newest first. Unreadable entries are skipped. */
@@ -364,6 +400,7 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
         b.saveType?.let { o.put("saveType", it) }
         b.saveTypeSource?.let { o.put("saveTypeSource", it.json) }
         b.flashChip?.let { o.put("flashChip", it) }
+        b.parentId?.let { o.put("parentId", it) }
         if (rtc is AgbRtcSnapshot) {
             o.put(
                 "rtc",
@@ -413,6 +450,7 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
                 saveType = if (json.has("saveType")) json.optInt("saveType") else null,
                 saveTypeSource = SaveTypeSource.fromJson(json.optString("saveTypeSource", "").ifEmpty { null }),
                 flashChip = if (json.has("flashChip")) json.optString("flashChip") else null,
+                parentId = json.optString("parentId", "").ifEmpty { null },
             )
         }
     } catch (_: Exception) {

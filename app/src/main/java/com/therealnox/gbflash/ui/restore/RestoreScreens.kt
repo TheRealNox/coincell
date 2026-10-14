@@ -254,6 +254,8 @@ private fun EntryCard(e: BackupEntry, r: RestoreReview?) {
             Text("${RestorePolicy.formatSize(e.size)}   CRC32 %08X".format(e.crc32))
             if (e.kind == BackupKind.IMPORTED) {
                 Text("Imported from ${e.originalFileName ?: "a file"}; never compared with a cartridge.")
+            } else if (e.kind == BackupKind.EDITED) {
+                Text("Edited in the Pokemon editor${e.parentId?.let { " from the backup $it" } ?: ""}; never read from a cartridge.")
             } else if (e.verified) {
                 Text("Verified when it was read (every chunk read twice).")
             }
