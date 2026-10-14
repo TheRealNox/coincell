@@ -54,7 +54,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -103,17 +102,18 @@ fun rememberSprites(): SpriteStore? {
  * three letters of its name when the sprite pack is not in the app or the file is missing.
  */
 @Composable
-fun PokemonSpriteView(p: PokemonSummary, height: Dp, modifier: Modifier = Modifier, zoom: Float = 1f) {
+fun PokemonSpriteView(p: PokemonSummary, height: Dp, modifier: Modifier = Modifier) {
     val store = rememberSprites()
     val key = SpriteRules.keyOf(p)
     val bitmap = remember(key, store) { store?.pokemon(key) }
     if (bitmap != null) {
+        // Sprites are trimmed to their opaque pixels (SpriteStore), so Fit fills the box; None keeps pixel art crisp.
         Image(
             bitmap = bitmap,
             contentDescription = null,
-            modifier = modifier.height(height).graphicsLayer(scaleX = zoom, scaleY = zoom),
+            modifier = modifier.size(height),
             contentScale = ContentScale.Fit,
-            filterQuality = FilterQuality.Low,
+            filterQuality = FilterQuality.None,
         )
     } else {
         InitialsTile(if (p.isEgg) "EGG" else SpriteRules.initials(p.speciesName), height, modifier)
@@ -125,7 +125,7 @@ fun SpriteKeyView(key: PokemonSpriteKey, name: String, height: Dp, modifier: Mod
     val store = rememberSprites()
     val bitmap = remember(key, store) { store?.pokemon(key) }
     if (bitmap != null) {
-        Image(bitmap, contentDescription = null, modifier = modifier.height(height), contentScale = ContentScale.Fit, filterQuality = FilterQuality.Low)
+        Image(bitmap, contentDescription = null, modifier = modifier.size(height), contentScale = ContentScale.Fit, filterQuality = FilterQuality.None)
     } else {
         InitialsTile(SpriteRules.initials(name), height, modifier)
     }
@@ -159,7 +159,7 @@ fun ItemIcon(generation: Int, itemId: Int, size: Dp = 32.dp) {
     val dark = isDarkBackground()
     val bitmap = remember(generation, itemId, dark) { store.item(generation, itemId, dark) }
     if (bitmap != null) {
-        Image(bitmap, contentDescription = null, modifier = Modifier.size(size), filterQuality = FilterQuality.Low)
+        Image(bitmap, contentDescription = null, modifier = Modifier.size(size), contentScale = ContentScale.Fit, filterQuality = FilterQuality.None)
     } else {
         Icon(
             Icons.Filled.Inventory2,

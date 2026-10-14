@@ -1,6 +1,7 @@
 package com.therealnox.gbflash.sprites
 
 import android.content.res.AssetManager
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.LruCache
 import androidx.compose.ui.graphics.ImageBitmap
@@ -33,12 +34,23 @@ class SpriteStore(private val resolver: SpriteResolver) {
     private fun cached(key: String, load: () -> ResolvedSprite?): ImageBitmap? {
         cache.get(key)?.let { return it.bitmap }
         val bitmap = try {
-            load()?.let { BitmapFactory.decodeByteArray(it.bytes, 0, it.bytes.size)?.asImageBitmap() }
+            load()?.let { BitmapFactory.decodeByteArray(it.bytes, 0, it.bytes.size) }?.let(::trimmed)?.asImageBitmap()
         } catch (_: Exception) {
             null
         }
         cache.put(key, Holder(bitmap))
         return bitmap
+    }
+
+    /** [bitmap] cropped to its opaque pixels (see [SpriteTrim]); unchanged when it is fully transparent or already tight. */
+    private fun trimmed(bitmap: Bitmap): Bitmap {
+        val w = bitmap.width
+        val h = bitmap.height
+        val pixels = IntArray(w * h)
+        bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
+        val b = SpriteTrim.opaqueBounds(pixels, w, h) ?: return bitmap
+        if (b[0] == 0 && b[1] == 0 && b[2] == w && b[3] == h) return bitmap
+        return Bitmap.createBitmap(bitmap, b[0], b[1], b[2] - b[0], b[3] - b[1])
     }
 
     private companion object {

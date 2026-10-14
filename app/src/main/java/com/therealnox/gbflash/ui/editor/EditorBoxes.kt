@@ -87,7 +87,7 @@ fun PokemonTile(
     ) {
         Box {
             Column(Modifier.padding(horizontal = 2.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                PokemonSpriteView(p, height = 44.dp, zoom = 1.6f)
+                PokemonSpriteView(p, height = 48.dp)
                 Text(
                     if (p.isEgg) "Egg" else p.speciesName,
                     style = MaterialTheme.typography.labelSmall,

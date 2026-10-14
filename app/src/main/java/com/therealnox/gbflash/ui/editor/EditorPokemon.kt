@@ -136,7 +136,7 @@ fun EditorPokemonScreen(vm: EditorViewModel, actions: EditorActions, slot: SlotR
 @Composable
 private fun Header(p: PokemonSummary, model: SaveEditor, slot: SlotRef) {
     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        PokemonSpriteView(p, height = 72.dp, zoom = 1.6f, modifier = Modifier.padding(horizontal = 12.dp))
+        PokemonSpriteView(p, height = 88.dp, modifier = Modifier.padding(horizontal = 12.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(if (p.isEgg) "Egg (${p.speciesName})" else p.speciesName, style = MaterialTheme.typography.titleLarge)
             val english = model.englishStrings.speciesName(p.species)
