@@ -23,3 +23,10 @@ Thumbs.db
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Android / Gradle extras
+local.properties
+*.hprof
+/app/release/
+/.kotlin/
+.externalNativeBuild/
