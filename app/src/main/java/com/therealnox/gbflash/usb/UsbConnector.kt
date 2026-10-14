@@ -10,7 +10,6 @@ import android.hardware.usb.UsbManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.hoho.android.usbserial.driver.UsbSerialPort
-import com.hoho.android.usbserial.driver.UsbSerialProber
 import java.io.IOException
 
 /** Finds the GBFlash's CH340, handles the permission dialog and opens it at 2 Mbaud 8N1. */
@@ -86,11 +85,12 @@ class UsbConnector(context: Context) {
 
     /** Opens the device at 2,000,000 baud 8N1. Throws [IOException] with a readable message. */
     fun open(device: UsbDevice): SerialLink {
-        val driver = UsbSerialProber.getDefaultProber().probeDevice(device)
-            ?: throw IOException("No USB-serial driver for ${device.deviceName}")
+        // Not the library's Ch34xSerialDriver: its strict init check fails on every reconnect with
+        // this CH340 until the device is replugged (see LenientCh34xSerialDriver).
+        val driver = LenientCh34xSerialDriver(device)
         val connection = usbManager.openDevice(device)
             ?: throw IOException("Could not open USB device (permission missing?)")
-        val port = driver.ports.firstOrNull() ?: throw IOException("Driver exposes no ports")
+        val port = driver.ports.first()
         try {
             port.open(connection)
             port.setParameters(BAUD, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
