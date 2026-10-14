@@ -3,6 +3,9 @@ package com.therealnox.gbflash.protocol
 import com.therealnox.gbflash.cart.AgbSaveHint
 import com.therealnox.gbflash.cart.CartHeader
 import com.therealnox.gbflash.cart.analyzeSaveWindow
+import com.therealnox.gbflash.save.BackupPlan
+import com.therealnox.gbflash.save.DmgBackupResult
+import com.therealnox.gbflash.save.DmgSaveBackup
 import com.therealnox.gbflash.usb.Clock
 import com.therealnox.gbflash.usb.SerialLink
 import com.therealnox.gbflash.usb.SystemClock
@@ -37,6 +40,23 @@ class DeviceSession private constructor(
     suspend fun probeAgbSaveReadOnly(): AgbSaveHint = locked {
         if (commands.platform != CartPlatform.GBA) commands.selectMode(CartPlatform.GBA)
         analyzeSaveWindow(commands.readAgbSaveWindow())
+    }
+
+    /**
+     * Reads and double-checks the whole save of the GB / GBC cartridge in [plan] into memory. Never
+     * writes cartridge SRAM and never switches platform (GB / GBC mode must already be active).
+     * Cartridge cleanup runs on success, error and cancel ([isCancelled] returning true).
+     */
+    internal suspend fun backupDmgSave(
+        plan: BackupPlan.Ready,
+        isCancelled: () -> Boolean,
+        onProgress: (done: Long, total: Long) -> Unit,
+        log: (String) -> Unit = {},
+        nowSeconds: () -> Long = { System.currentTimeMillis() / 1000 },
+    ): DmgBackupResult = locked {
+        check(commands.platform == CartPlatform.GB_GBC) { "GB / GBC mode is not active" }
+        val access = commands.dmgCartAccess()
+        DmgSaveBackup(access, access::prepare, access::releaseBus, nowSeconds, log).run(plan, isCancelled, onProgress)
     }
 
     /** Liveness check (PING on fw>=15). */

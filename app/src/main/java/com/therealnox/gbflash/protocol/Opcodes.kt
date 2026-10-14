@@ -9,9 +9,16 @@ internal object Op {
     const val SET_VOLTAGE_5V = 0xA5
     const val SET_VARIABLE = 0xA6
     const val SET_ADDR_AS_INPUTS = 0xA8
+    const val CLK_TOGGLE = 0xA9
     const val DISABLE_PULLUPS = 0xAC
     const val GET_VARIABLE = 0xAD
     const val DMG_CART_READ = 0xB1
+
+    /**
+     * Mapper register write only (`B2 <addr u32> <value u8>`). `DMG_CART_WRITE_SRAM` (`B3`) is
+     * deliberately NOT defined anywhere in this app yet: backups must never write cartridge SRAM.
+     */
+    const val DMG_CART_WRITE = 0xB2
     const val DMG_MBC_RESET = 0xB4
     const val AGB_CART_READ = 0xC1
     const val AGB_CART_READ_SRAM = 0xC3
@@ -27,6 +34,8 @@ internal enum class FwVar(val width: Int, val key: Int) {
     ADDRESS(32, 0x00),
     AUTO_POWEROFF_TIME(32, 0x01),
     TRANSFER_SIZE(16, 0x00),
+    STATUS_REGISTER_MASK(16, 0x05),
+    STATUS_REGISTER_VALUE(16, 0x06),
     CART_MODE(8, 0x00),
     DMG_ACCESS_MODE(8, 0x01),
     DMG_READ_CS_PULSE(8, 0x08),

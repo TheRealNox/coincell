@@ -124,6 +124,9 @@ internal class Commands(
         platform = null
     }
 
+    /** Restricted cartridge access for save backups (no SRAM writes possible). */
+    internal fun dmgCartAccess() = DmgCartAccess(this, transport)
+
     // ---- header ------------------------------------------------------------------------------
 
     /**

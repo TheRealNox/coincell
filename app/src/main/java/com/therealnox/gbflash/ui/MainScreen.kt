@@ -1,6 +1,8 @@
 package com.therealnox.gbflash.ui
 
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,7 +15,10 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -45,6 +50,10 @@ import com.therealnox.gbflash.cart.AgbHeader
 import com.therealnox.gbflash.cart.CartHeader
 import com.therealnox.gbflash.cart.DmgHeader
 import com.therealnox.gbflash.cart.hexDump
+import com.therealnox.gbflash.library.BackupEntry
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.therealnox.gbflash.protocol.CartPlatform
 import com.therealnox.gbflash.protocol.FirmwareInfo
 
@@ -67,7 +76,43 @@ private fun appColorScheme(): ColorScheme {
 fun MainScreen(vm: MainViewModel) {
     val state by vm.state.collectAsState()
     val log by vm.debugLog.lines.collectAsState()
+    var exportChoice by remember { mutableStateOf<BackupEntry?>(null) }
+    var deleteChoice by remember { mutableStateOf<BackupEntry?>(null) }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        vm.exportTo(uri)
+    }
+    val startExport: (BackupEntry, Boolean) -> Unit = { entry, withRtc ->
+        vm.beginExport(entry, withRtc)
+        exportLauncher.launch(vm.exportFileName())
+    }
     MaterialTheme(colorScheme = appColorScheme()) {
+        exportChoice?.let { entry ->
+            AlertDialog(
+                onDismissRequest = { exportChoice = null },
+                title = { Text("Export .sav") },
+                text = { Text("This backup has RTC data. Include it as a 48-byte footer (FlashGBX / emulator format)?") },
+                confirmButton = {
+                    TextButton(onClick = { exportChoice = null; startExport(entry, true) }) { Text("With RTC") }
+                },
+                dismissButton = {
+                    Row {
+                        TextButton(onClick = { exportChoice = null; startExport(entry, false) }) { Text("Without RTC") }
+                        TextButton(onClick = { exportChoice = null }) { Text("Cancel") }
+                    }
+                },
+            )
+        }
+        deleteChoice?.let { entry ->
+            AlertDialog(
+                onDismissRequest = { deleteChoice = null },
+                title = { Text("Delete backup?") },
+                text = { Text("${formatTime(entry.timestampMillis)} (CRC32 %08X) will be removed from this phone. This cannot be undone.".format(entry.crc32)) },
+                confirmButton = {
+                    TextButton(onClick = { deleteChoice = null; vm.deleteBackup(entry) }) { Text("Delete") }
+                },
+                dismissButton = { TextButton(onClick = { deleteChoice = null }) { Text("Keep") } },
+            )
+        }
         // targetSdk 35+ draws edge-to-edge; Scaffold applies the status/navigation bar insets.
         Scaffold(topBar = { TopAppBar(title = { Text("GBFlash") }) }) { innerPadding ->
             Column(
@@ -87,7 +132,15 @@ fun MainScreen(vm: MainViewModel) {
                         Text("Error: $it", Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onErrorContainer)
                     }
                 }
+                state.info?.let { InfoCard("Info", it) }
                 state.header?.let { HeaderCard(it) }
+                if (state.status == ConnectionStatus.CONNECTED && state.headerPlatform == CartPlatform.GB_GBC) {
+                    BackupCard(
+                        state, vm,
+                        onExport = { e -> if (e.rtcIncluded) exportChoice = e else startExport(e, false) },
+                        onDelete = { deleteChoice = it },
+                    )
+                }
                 state.agbSaveHint?.let { InfoCard("GBA save window (read-only probe)", it) }
                 state.header?.let { h ->
                     Collapsible("Raw header hex (${h.raw.size} bytes)") { Mono(h.raw.hexDump()) }
@@ -167,6 +220,70 @@ private fun PlatformCard(state: UiState, vm: MainViewModel) {
             if (state.platform == CartPlatform.GBA) {
                 OutlinedButton(onClick = vm::probeAgbSave, enabled = !state.busy) { Text("Probe GBA save window (read-only)") }
             }
+        }
+    }
+}
+
+private fun formatTime(millis: Long): String =
+    SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(millis))
+
+@Composable
+private fun BackupCard(state: UiState, vm: MainViewModel, onExport: (BackupEntry) -> Unit, onDelete: (BackupEntry) -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Save backup", style = MaterialTheme.typography.titleMedium)
+            val progress = state.backupProgress
+            if (progress != null) {
+                val (done, total) = progress
+                LinearProgressIndicator(progress = { if (total > 0) done.toFloat() / total else 0f }, modifier = Modifier.fillMaxWidth())
+                Text("Reading and verifying: $done / $total bytes (every chunk is read twice)")
+                OutlinedButton(onClick = vm::cancelBackup) { Text("Cancel") }
+            } else {
+                Button(onClick = vm::backupSave, enabled = state.backupAvailable && !state.busy) { Text("Back up save") }
+                state.backupUnavailableReason?.let { Text(it) }
+                if (state.backupAvailable) {
+                    Text("The backup is read into memory, double-checked and then stored in the app library. Nothing is written to the cartridge.")
+                }
+            }
+            state.lastBackup?.let { SummaryBlock(it, state.lastBackupWarnings) }
+            Text("Backups for this game", style = MaterialTheme.typography.titleSmall)
+            if (state.backups.isEmpty()) Text("No backups yet.")
+            state.backups.forEach { e -> BackupRow(e, enabled = !state.busy, onExport = { onExport(e) }, onDelete = { onDelete(e) }) }
+        }
+    }
+}
+
+@Composable
+private fun SummaryBlock(e: BackupEntry, warnings: List<String>) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Backup stored", style = MaterialTheme.typography.titleSmall)
+            Text("Size: ${e.size} bytes\nCRC32: %08X\nVerified: every chunk read twice, identical".format(e.crc32))
+            e.suspectReason?.let { Text("WARNING: $it", color = MaterialTheme.colorScheme.error) }
+            e.rtc?.let { Text("RTC: ${it.describe()}") }
+            if (e.rtc == null && e.rtcDeclared) Text("The header declares an RTC but it could not be read.")
+            if (e.rtc != null && e.rtcProbePresent == false) {
+                Text("The RTC probe saw no clock (a freshly reset RTC looks absent), but the header declares one, so it was stored. Export without RTC if unwanted.")
+            }
+            warnings.forEach { Text("Note: $it") }
+        }
+    }
+}
+
+@Composable
+private fun BackupRow(e: BackupEntry, enabled: Boolean, onExport: () -> Unit, onDelete: () -> Unit) {
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            buildString {
+                append(formatTime(e.timestampMillis))
+                append("  ${e.size} B  CRC32 %08X".format(e.crc32))
+                if (e.rtcIncluded) append("  [RTC]")
+                if (e.suspect) append("  [suspect]")
+            },
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = onExport, enabled = enabled) { Text("Export .sav") }
+            TextButton(onClick = onDelete, enabled = enabled) { Text("Delete") }
         }
     }
 }

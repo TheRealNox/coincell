@@ -83,6 +83,32 @@ class FakeFirmware(
     /** Number of upcoming commands to leave unanswered (to test error handling). */
     var swallowReplies = 0
 
+    /** Attached DMG cartridge; when set, B1/B2/B3/A9 are served from it. */
+    var cart: FakeDmgCart? = null
+
+    /** Count of B3 (DMG_CART_WRITE_SRAM) commands received; must stay 0 during backups. */
+    var b3Count = 0
+        private set
+
+    /** Number of RAM-mode B1 reads served (address >= 0xA000). */
+    var ramReadCount = 0
+        private set
+
+    /** Number of CLK_TOGGLE commands. */
+    var clockToggles = 0
+        private set
+
+    /** Things the real firmware would choke on, e.g. a RAM read without access mode 3 or CS pulse. */
+    val violations = mutableListOf<String>()
+
+    /**
+     * Optional fault injection for RAM reads: (1-based RAM read number, address, data) -> bytes to
+     * send. Return a shorter array to simulate a short reply.
+     */
+    var ramReadFilter: ((Int, Int, ByteArray) -> ByteArray)? = null
+
+    private var address = 0
+
     init {
         link.onWrite = { data ->
             buf += data
@@ -128,6 +154,7 @@ class FakeFirmware(
                     val value = u32(c, 6)
                     vars[key] = value
                     if (key == (4 to 0)) {
+                        address = value.toInt()
                         romPos = (value * 1).toInt()
                         savePos = value.toInt()
                     }
@@ -147,7 +174,42 @@ class FakeFirmware(
                     val c = consume(2)
                     reply(c[1].toInt().inv() and 0xFF)
                 }
-                0xB1, 0xC1 -> {
+                0xB2 -> {
+                    if (!need(6)) return
+                    val c = consume(6)
+                    cart?.write(u32(c, 1).toInt(), c[5].toInt() and 0xFF)
+                    reply(1)
+                }
+                0xB3 -> { consume(1); b3Count++; reply(1) }
+                0xA9 -> {
+                    if (!need(5)) return
+                    consume(5)
+                    clockToggles++
+                    reply(1)
+                }
+                0xB1 -> if (cart != null) {
+                    consume(1)
+                    val c = cart!!
+                    val n = (vars[2 to 0] ?: 0L).toInt()
+                    val mode = vars[1 to 1] ?: 0L
+                    val readCs = vars[1 to 8] ?: 0L
+                    val ram = address >= 0xA000
+                    if (ram && (mode != 3L || readCs != 1L)) violations += "RAM read at 0x%X with mode $mode, read CS pulse $readCs".format(address)
+                    if (!ram && mode != 1L) violations += "ROM read at 0x%X with access mode $mode".format(address)
+                    var data = ByteArray(n) { c.read(address + it).toByte() }
+                    if (ram) {
+                        ramReadCount++
+                        data = ramReadFilter?.invoke(ramReadCount, address, data) ?: data
+                    }
+                    address += n
+                    reply(data)
+                } else {
+                    consume(1)
+                    val n = (vars[2 to 0] ?: 0L).toInt()
+                    reply(ByteArray(n) { rom.getOrElse(romPos + it) { 0xFF.toByte() } })
+                    romPos += n
+                }
+                0xC1 -> {
                     consume(1)
                     val n = (vars[2 to 0] ?: 0L).toInt()
                     reply(ByteArray(n) { rom.getOrElse(romPos + it) { 0xFF.toByte() } })
