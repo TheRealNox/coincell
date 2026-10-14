@@ -30,3 +30,6 @@ local.properties
 /app/release/
 /.kotlin/
 .externalNativeBuild/
+
+# Personal save fixtures for :pkcore tests (never commit)
+/pkcore/src/test/fixtures-local/

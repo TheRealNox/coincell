@@ -1,0 +1,252 @@
+—
+Destructor
+Golpe Kárate
+Doble Bofetón
+Puño Cometa
+Megapuño
+Día de Pago
+Puño Fuego
+Puño Hielo
+Puño Trueno
+Arañazo
+Agarre
+Guillotina
+Viento Cortante
+Danza Espada
+Corte
+Tornado
+Ataque Ala
+Remolino
+Vuelo
+Atadura
+Atizar
+Látigo Cepa
+Pisotón
+Doble Patada
+Megapatada
+Patada Salto
+Patada Giro
+Ataque Arena
+Golpe Cabeza
+Cornada
+Ataque Furia
+Perforador
+Placaje
+Golpe Cuerpo
+Constricción
+Derribo
+Saña
+Doble Filo
+Agitacola
+Picotazo Veneno
+Doble Ataque
+Pin Misil
+Malicioso
+Mordisco
+Gruñido
+Rugido
+Canto
+Supersónico
+Bomba Sónica
+Anulación
+Ácido
+Ascuas
+Lanzallamas
+Neblina
+Pistola Agua
+Hidrobomba
+Surf
+Rayo Hielo
+Ventisca
+Psicorrayo
+Rayo Burbuja
+Rayo Aurora
+Hiperrayo
+Picotazo
+Pico Taladro
+Sumisión
+Patada Baja
+Contraataque
+Sísmico
+Fuerza
+Absorber
+Megaagotar
+Drenadoras
+Desarrollo
+Hoja Afilada
+Rayo Solar
+Polvo Veneno
+Paralizador
+Somnífero
+Danza Pétalo
+Disparo Demora
+Furia Dragón
+Giro Fuego
+Impactrueno
+Rayo
+Onda Trueno
+Trueno
+Lanzarrocas
+Terremoto
+Fisura
+Excavar
+Tóxico
+Confusión
+Psíquico
+Hipnosis
+Meditación
+Agilidad
+Ataque Rápido
+Furia
+Teletransporte
+Tinieblas
+Mimético
+Chirrido
+Doble Equipo
+Recuperación
+Fortaleza
+Reducción
+Pantalla de Humo
+Rayo Confuso
+Refugio
+Rizo Defensa
+Barrera
+Pantalla de Luz
+Niebla
+Reflejo
+Foco Energía
+Venganza
+Metrónomo
+Espejo
+Autodestrucción
+Bomba Huevo
+Lengüetazo
+Polución
+Residuos
+Hueso Palo
+Llamarada
+Cascada
+Tenaza
+Meteoros
+Cabezazo
+Clavo Cañón
+Restricción
+Amnesia
+Kinético
+Ovocuración
+Pat. Salto Alta
+Deslumbrar
+Comesueños
+Gas Venenoso
+Bombardeo
+Chupavidas
+Beso Amoroso
+Ataque Aéreo
+Transformación
+Burbuja
+Puño Mareo
+Espora
+Destello
+Psicoonda
+Salpicadura
+Armadura Ácida
+Martillazo
+Explosión
+Golpes Furia
+Huesomerang
+Descanso
+Avalancha
+Hipercolmillo
+Afilar
+Conversión
+Triataque
+Superdiente
+Cuchillada
+Sustituto
+Forcejeo
+Esquema
+Triple Patada
+Ladrón
+Telaraña
+Telépata
+Pesadilla
+Rueda Fuego
+Ronquido
+Maldición
+Azote
+Conversión 2
+Aerochorro
+Esporagodón
+Inversión
+Rencor
+Nieve Polvo
+Protección
+Ultrapuño
+Cara Susto
+Finta
+Beso Dulce
+Tambor
+Bomba Lodo
+Bofetón Lodo
+Pulpocañón
+Púas
+Electrocañón
+Profecía
+Mismo Destino
+Canto Mortal
+Viento Hielo
+Detección
+Ataque Óseo
+Fijar Blanco
+Enfado
+Tormenta Arena
+Gigadrenado
+Aguante
+Encanto
+Rodar
+Falso Tortazo
+Contoneo
+Batido
+Chispa
+Corte Furia
+Ala de Acero
+Mal de Ojo
+Atracción
+Sonámbulo
+Cascabel Cura
+Retribución
+Presente
+Frustración
+Velo Sagrado
+Divide Dolor
+Fuego Sagrado
+Magnitud
+Puño Dinámico
+Megacuerno
+Dragoaliento
+Relevo
+Otra Vez
+Persecución
+Giro Rápido
+Dulce Aroma
+Cola Férrea
+Garra Metal
+Llave Vital
+Sol Matinal
+Fotosíntesis
+Luz Lunar
+Poder Oculto
+Tajo Cruzado
+Ciclón
+Danza Lluvia
+Día Soleado
+Triturar
+Manto Espejo
+Autosugestión
+Veloc. Extrema
+Poder Pasado
+Bola Sombra
+Premonición
+Golpe Roca
+Torbellino
+Paliza

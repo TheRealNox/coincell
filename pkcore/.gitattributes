@@ -1,0 +1,3 @@
+# Packaged PKHeX data must stay byte-exact whatever core.autocrlf says.
+*.bin binary
+src/main/resources/** -text
