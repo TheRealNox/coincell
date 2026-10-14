@@ -223,6 +223,26 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
         return if (rtc == null) save else save + rtc
     }
 
+    /**
+     * Replaces the free-text note of [entry] and returns the re-read entry. Only `backup.json` is touched
+     * (temp file + atomic rename, like every other write); the save, its CRC and the id are untouched.
+     */
+    @Synchronized
+    fun updateNote(entry: BackupEntry, note: String): BackupEntry {
+        val dir = dirOf(entry)
+        val file = File(dir, BACKUP_JSON)
+        val json = JSONObject(file.readText()).put("note", note)
+        val tmp = File(dir, "$TEMP_PREFIX$BACKUP_JSON")
+        try {
+            writeFile(tmp, json.toString(2).toByteArray())
+            moveAtomic(tmp, file)
+        } catch (e: Exception) {
+            tmp.delete()
+            throw e
+        }
+        return readEntry(dir, entry.gameKey) ?: throw IOException("Updated backup cannot be read back")
+    }
+
     @Synchronized
     fun delete(entry: BackupEntry) {
         val dir = dirOf(entry)

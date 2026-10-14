@@ -1,4 +1,4 @@
-package com.therealnox.gbflash.ui
+package com.therealnox.gbflash.ui.restore
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
@@ -25,7 +25,19 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import com.therealnox.gbflash.ui.ScreenFrame
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -50,6 +62,10 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.therealnox.gbflash.device.ConnectionStatus
+import com.therealnox.gbflash.device.DeviceController
+import com.therealnox.gbflash.device.DeviceState
+import com.therealnox.gbflash.device.RestoreUi
 import com.therealnox.gbflash.library.BackupEntry
 import com.therealnox.gbflash.library.BackupKind
 import com.therealnox.gbflash.restore.RestoreMatch
@@ -62,15 +78,40 @@ import kotlinx.coroutines.launch
 
 private const val HOLD_MILLIS = 1500
 
-/** The restore flow replaces the card list while it is open (single-screen UI, docs/UI_DESIGN.md 3.4 / 4.7). */
+/**
+ * The restore flow as its own full-screen destination (docs/UI_DESIGN.md 3.4 / 4.7): no bottom bar, no
+ * status bar (this screen is the detailed view of the operation). Behaviour is unchanged from milestone 3.
+ */
 @Composable
-fun RestoreFlow(state: UiState, vm: MainViewModel) {
+fun RestoreScreen(device: DeviceController, onClose: () -> Unit) {
+    val state by device.state.collectAsState()
+    val ui = state.restore
+    // The flow ended (closed, or the reader went away): leave the screen.
+    LaunchedEffect(ui == null) { if (ui == null) onClose() }
+    ScreenFrame(
+        title = "Restore to cartridge",
+        statusBar = false,
+        actions = {
+            IconButton(onClick = device::closeRestore, enabled = !state.busy) {
+                Icon(Icons.Filled.Close, contentDescription = "Close the restore")
+            }
+        },
+    ) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+            RestoreFlow(state, device)
+        }
+    }
+}
+
+/** Back never interrupts a running cartridge operation; elsewhere it leaves the flow. */
+@Composable
+fun RestoreFlow(state: DeviceState, vm: DeviceController) {
     val ui = state.restore ?: return
-    // Back never interrupts a running cartridge operation; elsewhere it leaves the flow.
     BackHandler { if (!state.busy) vm.closeRestore() }
     Column(Modifier.padding(0.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Stepper(ui)
         when (ui) {
+            RestoreUi.Loading -> LoadingStep()
             is RestoreUi.Review -> ReviewStep(ui, vm)
             is RestoreUi.SafetyCopyRunning -> SafetyCopyStep(ui, vm)
             is RestoreUi.Stopped -> StoppedStep(ui, vm)
@@ -82,16 +123,23 @@ fun RestoreFlow(state: UiState, vm: MainViewModel) {
 }
 
 @Composable
+private fun LoadingStep() {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
+        Text("Preparing the review...")
+    }
+}
+
+@Composable
 private fun Stepper(ui: RestoreUi) {
     val current = when (ui) {
-        is RestoreUi.Review -> 0
+        RestoreUi.Loading, is RestoreUi.Review -> 0
         is RestoreUi.SafetyCopyRunning, is RestoreUi.Stopped -> 1
         is RestoreUi.Confirm -> 1
         is RestoreUi.Working -> if (ui.phase == RestorePhase.WRITE) 2 else 3
         is RestoreUi.Done -> 4
     }
     val steps = listOf("Review", "Safety copy", "Write", "Verify")
-    Text("Restore to cartridge", style = MaterialTheme.typography.headlineSmall)
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         steps.forEachIndexed { i, label ->
             val mark = if (i < current) "✓ " else ""
@@ -107,7 +155,7 @@ private fun Stepper(ui: RestoreUi) {
 // ---- review ------------------------------------------------------------------------------------
 
 @Composable
-private fun ReviewStep(ui: RestoreUi.Review, vm: MainViewModel) {
+private fun ReviewStep(ui: RestoreUi.Review, vm: DeviceController) {
     val r = ui.review
     val h = r.header
     Section("On the cartridge now")
@@ -194,7 +242,7 @@ private fun EntryCard(e: BackupEntry, r: RestoreReview?) {
 }
 
 @Composable
-private fun MatchBlock(ui: RestoreUi.Review, r: RestoreReview, vm: MainViewModel) {
+private fun MatchBlock(ui: RestoreUi.Review, r: RestoreReview, vm: DeviceController) {
     when (val m = r.match) {
         RestoreMatch.SameGame -> StatusCard("Same game", "Platform, title and checksum match.", error = false)
         is RestoreMatch.DifferentCartridge -> StatusCard(
@@ -250,7 +298,7 @@ private fun KeepScreenOn() {
 }
 
 @Composable
-private fun SafetyCopyStep(ui: RestoreUi.SafetyCopyRunning, vm: MainViewModel) {
+private fun SafetyCopyStep(ui: RestoreUi.SafetyCopyRunning, vm: DeviceController) {
     KeepScreenOn()
     val (done, total) = ui.progress
     Card(Modifier.fillMaxWidth()) {
@@ -265,7 +313,7 @@ private fun SafetyCopyStep(ui: RestoreUi.SafetyCopyRunning, vm: MainViewModel) {
 }
 
 @Composable
-private fun StoppedStep(ui: RestoreUi.Stopped, vm: MainViewModel) {
+private fun StoppedStep(ui: RestoreUi.Stopped, vm: DeviceController) {
     StatusCard(if (ui.cancelled) "Restore cancelled" else "Restore did not start", ui.message + "\nThe cartridge was not changed.", error = !ui.cancelled)
     Button(onClick = vm::closeRestore) { Text("Done") }
 }
@@ -278,7 +326,7 @@ private fun DontUnplug() {
 // ---- confirm -----------------------------------------------------------------------------------
 
 @Composable
-private fun ConfirmStep(ui: RestoreUi.Confirm, vm: MainViewModel) {
+private fun ConfirmStep(ui: RestoreUi.Confirm, vm: DeviceController) {
     var showDialog by remember { mutableStateOf(false) }
     val r = ui.request.review
     val safety = ui.safety.entry
@@ -377,7 +425,7 @@ private fun HoldToConfirmButton(label: String, onConfirm: () -> Unit, onOpenDial
 // ---- write / verify ----------------------------------------------------------------------------
 
 @Composable
-private fun WorkingStep(ui: RestoreUi.Working, vm: MainViewModel) {
+private fun WorkingStep(ui: RestoreUi.Working, vm: DeviceController) {
     KeepScreenOn()
     var askStop by remember { mutableStateOf(false) }
     val (done, total) = ui.progress
@@ -423,7 +471,7 @@ private fun WorkingStep(ui: RestoreUi.Working, vm: MainViewModel) {
 // ---- result ------------------------------------------------------------------------------------
 
 @Composable
-private fun DoneStep(ui: RestoreUi.Done, state: UiState, vm: MainViewModel) {
+private fun DoneStep(ui: RestoreUi.Done, state: DeviceState, vm: DeviceController) {
     val r = ui.result
     val ok = r.status == RestoreStatus.VERIFIED
     val title = when (r.status) {
@@ -449,6 +497,7 @@ private fun DoneStep(ui: RestoreUi.Done, state: UiState, vm: MainViewModel) {
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = vm::closeRestore, enabled = !state.busy) { Text("Done") }
+        OutlinedButton(onClick = { vm.powerOffCart() }, enabled = !state.busy && state.cartPowered) { Text("Power off cart") }
         val canRestoreAgain = state.status == ConnectionStatus.CONNECTED && state.header != null && !state.busy
         if (ok) {
             TextButton(onClick = vm::undoRestore, enabled = canRestoreAgain) { Text("Undo restore") }

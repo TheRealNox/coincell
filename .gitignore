@@ -30,3 +30,6 @@ local.properties
 /app/release/
 /.kotlin/
 .externalNativeBuild/
+
+# Agent git worktrees
+.claude/worktrees/

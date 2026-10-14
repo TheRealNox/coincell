@@ -1,0 +1,339 @@
+package com.therealnox.gbflash.ui
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Usb
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.navigation.NavDestination
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
+import com.therealnox.gbflash.device.BackupUi
+import com.therealnox.gbflash.device.DeviceController
+import com.therealnox.gbflash.device.RestoreUi
+import com.therealnox.gbflash.library.LibraryState
+import com.therealnox.gbflash.library.LibraryStore
+import com.therealnox.gbflash.ui.components.StatusAction
+import com.therealnox.gbflash.ui.device.BackupFlowScreen
+import com.therealnox.gbflash.ui.device.DeviceScreen
+import com.therealnox.gbflash.ui.device.DeviceScreenViewModel
+import com.therealnox.gbflash.ui.library.BackupDetailScreen
+import com.therealnox.gbflash.ui.library.BackupDetailViewModel
+import com.therealnox.gbflash.ui.library.GameDetailScreen
+import com.therealnox.gbflash.ui.library.GameDetailViewModel
+import com.therealnox.gbflash.ui.library.LibraryScreen
+import com.therealnox.gbflash.ui.library.LibraryViewModel
+import com.therealnox.gbflash.ui.nav.AboutRoute
+import com.therealnox.gbflash.ui.nav.AdvancedRoute
+import com.therealnox.gbflash.ui.nav.BackupFlowRoute
+import com.therealnox.gbflash.ui.nav.BackupRoute
+import com.therealnox.gbflash.ui.nav.DebugLogRoute
+import com.therealnox.gbflash.ui.nav.DeviceRoute
+import com.therealnox.gbflash.ui.nav.FirmwareRoute
+import com.therealnox.gbflash.ui.nav.GameRoute
+import com.therealnox.gbflash.ui.nav.GbaProbeRoute
+import com.therealnox.gbflash.ui.nav.LibraryRoute
+import com.therealnox.gbflash.ui.nav.RawHeaderRoute
+import com.therealnox.gbflash.ui.nav.RestoreRoute
+import com.therealnox.gbflash.ui.nav.SettingsRoute
+import com.therealnox.gbflash.ui.restore.RestoreScreen
+import com.therealnox.gbflash.ui.settings.AboutScreen
+import com.therealnox.gbflash.ui.settings.AdvancedScreen
+import com.therealnox.gbflash.ui.settings.AppPrefs
+import com.therealnox.gbflash.ui.settings.DebugLogScreen
+import com.therealnox.gbflash.ui.settings.FirmwareScreen
+import com.therealnox.gbflash.ui.settings.GbaProbeScreen
+import com.therealnox.gbflash.ui.settings.RawHeaderScreen
+import com.therealnox.gbflash.ui.settings.SettingsScreen
+import kotlinx.coroutines.flow.first
+import kotlin.reflect.KClass
+
+private enum class Tab(val route: Any, val label: String) {
+    LIBRARY(LibraryRoute, "Library"),
+    DEVICE(DeviceRoute, "Device"),
+    SETTINGS(SettingsRoute, "Settings"),
+}
+
+private fun NavDestination?.isRoute(vararg routes: KClass<*>): Boolean =
+    this?.hierarchy?.any { d -> routes.any { d.hasRoute(it) } } == true
+
+private fun NavDestination?.tab(): Tab? = when {
+    isRoute(LibraryRoute::class, GameRoute::class, BackupRoute::class) -> Tab.LIBRARY
+    isRoute(DeviceRoute::class) -> Tab.DEVICE
+    isRoute(
+        SettingsRoute::class, AdvancedRoute::class, DebugLogRoute::class, RawHeaderRoute::class,
+        GbaProbeRoute::class, FirmwareRoute::class, AboutRoute::class,
+    ) -> Tab.SETTINGS
+    else -> null
+}
+
+/**
+ * The app: bottom navigation (Library, Device, Settings), the nav host with type-safe routes, snackbars and the
+ * dialogs that must appear on any screen (the RTC question, an interrupted operation).
+ *
+ * @param startOnDevice launched by the USB attach intent
+ * @param usbIntentTick incremented when the USB attach intent arrives while the app is already open
+ */
+@Composable
+fun AppShell(
+    device: DeviceController,
+    store: LibraryStore,
+    prefs: AppPrefs,
+    versionName: String,
+    startOnDevice: Boolean,
+    usbIntentTick: Int,
+) {
+    val nav = rememberNavController()
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val deviceState by device.state.collectAsState()
+
+    // Start on Device when launched by the USB attach intent or when there is nothing in the library yet.
+    var start by rememberSaveable { mutableStateOf<String?>(null) }
+    if (start == null) {
+        val decided by produceState<String?>(null) {
+            val s = store.state.first { it !is LibraryState.Loading }
+            value = if (startOnDevice || (s is LibraryState.Loaded && s.games.isEmpty())) "device" else "library"
+        }
+        LaunchedEffect(decided) { if (decided != null) start = decided }
+        Box(Modifier.fillMaxSize())
+        return
+    }
+
+    fun openTab(tab: Tab) {
+        nav.navigate(tab.route) {
+            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
+    LaunchedEffect(usbIntentTick) { if (usbIntentTick > 0) openTab(Tab.DEVICE) }
+
+    val shell = remember(device, store) {
+        Shell(
+            device = device,
+            store = store,
+            snackbar = snackbar,
+            scope = scope,
+            onStatusAction = { action ->
+                val s = device.state.value
+                when (action) {
+                    StatusAction.CONNECT, StatusAction.ALLOW -> device.refresh()
+                    StatusAction.CHOOSE_TYPE, StatusAction.FIX -> openTab(Tab.DEVICE)
+                    StatusAction.POWER_OFF -> device.powerOffCart()
+                    StatusAction.CANCEL -> if (s.backup is BackupUi.Running) device.cancelBackup() else device.stopRestore()
+                    StatusAction.OPEN -> nav.navigate(RestoreRoute) { launchSingleTop = true }
+                }
+            },
+            onStatusClick = {
+                val s = device.state.value
+                when {
+                    s.backup is BackupUi.Running -> nav.navigate(BackupFlowRoute) { launchSingleTop = true }
+                    s.restore != null && s.restore !is RestoreUi.Done -> nav.navigate(RestoreRoute) { launchSingleTop = true }
+                    else -> openTab(Tab.DEVICE)
+                }
+            },
+        )
+    }
+
+    val backStack by nav.currentBackStackEntryAsState()
+    val destination = backStack?.destination
+    val currentTab = destination.tab()
+    val showBottomBar = currentTab != null &&
+        !destination.isRoute(AdvancedRoute::class, DebugLogRoute::class, RawHeaderRoute::class, GbaProbeRoute::class, FirmwareRoute::class, AboutRoute::class)
+
+    // A running restore or backup is always reachable: if the screen of an operation is not open, the status bar
+    // links to it. Nothing here starts or stops anything.
+    CompositionLocalProvider(LocalShell provides shell) {
+        Scaffold(
+            snackbarHost = { SnackbarHost(snackbar) },
+            bottomBar = {
+                if (showBottomBar) {
+                    NavigationBar {
+                        Tab.entries.forEach { tab ->
+                            NavigationBarItem(
+                                selected = currentTab == tab,
+                                onClick = { openTab(tab) },
+                                icon = {
+                                    Icon(
+                                        when (tab) {
+                                            Tab.LIBRARY -> Icons.Filled.Inventory2
+                                            Tab.DEVICE -> Icons.Filled.Usb
+                                            Tab.SETTINGS -> Icons.Filled.Settings
+                                        },
+                                        contentDescription = null,
+                                    )
+                                },
+                                label = { Text(tab.label) },
+                                modifier = Modifier.semantics { contentDescription = "${tab.label} tab" },
+                            )
+                        }
+                    }
+                }
+            },
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        ) { inner ->
+            Box(
+                Modifier
+                    .padding(inner)
+                    .then(if (showBottomBar) Modifier else Modifier.navigationBarsPadding())
+                    .imePadding(),
+            ) {
+                AppNavHost(nav, start!!, device, store, prefs, versionName, ::openTab)
+            }
+        }
+
+        if (deviceState.rtcPrompt != null) {
+            val prompt = deviceState.rtcPrompt!!
+            AlertDialog(
+                onDismissRequest = { if (prompt.beforeStart) device.dismissRtcPrompt() },
+                title = { Text("Real Time Clock") },
+                text = { Text("A Real Time Clock cartridge was detected. Do you want the cartridge's RTC register values also to be saved?") },
+                confirmButton = { TextButton(onClick = { device.answerRtcPrompt(true) }) { Text("Yes") } },
+                dismissButton = { TextButton(onClick = { device.answerRtcPrompt(false) }) { Text("No") } },
+            )
+        }
+        deviceState.interrupted?.let { msg ->
+            AlertDialog(
+                onDismissRequest = device::dismissMessages,
+                title = { Text("Reader disconnected") },
+                text = { Text(msg) },
+                confirmButton = { TextButton(onClick = device::dismissMessages) { Text("OK") } },
+            )
+        }
+    }
+}
+
+@Composable
+private fun AppNavHost(
+    nav: androidx.navigation.NavHostController,
+    start: String,
+    device: DeviceController,
+    store: LibraryStore,
+    prefs: AppPrefs,
+    versionName: String,
+    openTab: (Tab) -> Unit,
+) {
+    NavHost(nav, startDestination = if (start == "device") DeviceRoute else LibraryRoute) {
+        composable<LibraryRoute> {
+            val vm = viewModel<LibraryViewModel>(factory = viewModelFactory { initializer { LibraryViewModel(store, device.state) } })
+            LibraryScreen(
+                vm,
+                onOpenGame = { nav.navigate(GameRoute(it)) },
+                onGoDevice = { openTab(Tab.DEVICE) },
+            )
+        }
+        composable<DeviceRoute> {
+            val vm = viewModel<DeviceScreenViewModel>(factory = viewModelFactory { initializer { DeviceScreenViewModel(store, device.state) } })
+            DeviceScreen(
+                vm,
+                onBackupStarted = { nav.navigate(BackupFlowRoute) { launchSingleTop = true } },
+                onOpenGame = { nav.navigate(GameRoute(it)) },
+                onGoLibrary = { openTab(Tab.LIBRARY) },
+                onOpenFirmware = { nav.navigate(FirmwareRoute) },
+            )
+        }
+        composable<SettingsRoute> {
+            SettingsScreen(
+                prefs,
+                onFirmware = { nav.navigate(FirmwareRoute) },
+                onAdvanced = { nav.navigate(AdvancedRoute) },
+                onAbout = { nav.navigate(AboutRoute) },
+            )
+        }
+        composable<GameRoute> { entry ->
+            val route = entry.toRoute<GameRoute>()
+            val vm = viewModel<GameDetailViewModel>(factory = viewModelFactory { initializer { GameDetailViewModel(route.gameKey, store, device.state) } })
+            GameDetailScreen(
+                vm,
+                onBack = { nav.popBackStack() },
+                onOpenBackup = { nav.navigate(BackupRoute(route.gameKey, it.id)) },
+                onRestore = { e ->
+                    device.startRestore(e)
+                    nav.navigate(RestoreRoute) { launchSingleTop = true }
+                },
+                onBackupCart = {
+                    device.backupSave()
+                    nav.navigate(BackupFlowRoute) { launchSingleTop = true }
+                },
+                onGoDevice = { openTab(Tab.DEVICE) },
+            )
+        }
+        composable<BackupRoute> { entry ->
+            val route = entry.toRoute<BackupRoute>()
+            val vm = viewModel<BackupDetailViewModel>(
+                factory = viewModelFactory { initializer { BackupDetailViewModel(route.gameKey, route.backupId, store, device.state) } },
+            )
+            BackupDetailScreen(
+                vm,
+                onBack = { nav.popBackStack() },
+                onRestore = { e ->
+                    device.startRestore(e)
+                    nav.navigate(RestoreRoute) { launchSingleTop = true }
+                },
+            )
+        }
+        composable<BackupFlowRoute> {
+            BackupFlowScreen(
+                onClose = { nav.popBackStack() },
+                onViewInLibrary = { e ->
+                    nav.navigate(BackupRoute(e.gameKey, e.id))
+                },
+            )
+        }
+        composable<RestoreRoute> {
+            RestoreScreen(device, onClose = { nav.popBackStack() })
+        }
+        composable<AdvancedRoute> {
+            AdvancedScreen(
+                onBack = { nav.popBackStack() },
+                onDebugLog = { nav.navigate(DebugLogRoute) },
+                onRawHeader = { nav.navigate(RawHeaderRoute) },
+                onProbe = { nav.navigate(GbaProbeRoute) },
+            )
+        }
+        composable<DebugLogRoute> { DebugLogScreen(onBack = { nav.popBackStack() }) }
+        composable<RawHeaderRoute> { RawHeaderScreen(onBack = { nav.popBackStack() }) }
+        composable<GbaProbeRoute> { GbaProbeScreen(onBack = { nav.popBackStack() }) }
+        composable<FirmwareRoute> { FirmwareScreen(onBack = { nav.popBackStack() }) }
+        composable<AboutRoute> { AboutScreen(versionName, onBack = { nav.popBackStack() }, onFirmware = { nav.navigate(FirmwareRoute) }) }
+    }
+}
