@@ -1,9 +1,10 @@
 package com.therealnox.gbflash.ui
 
+import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -16,10 +17,17 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -39,19 +48,35 @@ import com.therealnox.gbflash.cart.hexDump
 import com.therealnox.gbflash.protocol.CartPlatform
 import com.therealnox.gbflash.protocol.FirmwareInfo
 
+/** Follows the system dark mode, with Material You dynamic colors on Android 12+. */
+@Composable
+private fun appColorScheme(): ColorScheme {
+    val dark = isSystemInDarkTheme()
+    return when {
+        Build.VERSION.SDK_INT >= 31 -> {
+            val context = LocalContext.current
+            if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        }
+        dark -> darkColorScheme()
+        else -> lightColorScheme()
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(vm: MainViewModel) {
     val state by vm.state.collectAsState()
     val log by vm.debugLog.lines.collectAsState()
-    MaterialTheme {
-        Surface(modifier = Modifier.fillMaxSize()) {
+    MaterialTheme(colorScheme = appColorScheme()) {
+        // targetSdk 35+ draws edge-to-edge; Scaffold applies the status/navigation bar insets.
+        Scaffold(topBar = { TopAppBar(title = { Text("GBFlash") }) }) { innerPadding ->
             Column(
                 modifier = Modifier
+                    .padding(innerPadding)
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("GBFlash", style = MaterialTheme.typography.headlineMedium)
                 ConnectionCard(state, onConnect = vm::refresh, onDisconnect = vm::disconnect)
                 state.firmware?.let { FirmwareCard(it) }
                 if (state.status == ConnectionStatus.CONNECTED) {
