@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "gbflash-android"
 include(":app")
+include(":pkcore")

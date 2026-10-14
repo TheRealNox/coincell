@@ -33,3 +33,6 @@ local.properties
 
 # Agent git worktrees
 .claude/worktrees/
+
+# Personal save fixtures for :pkcore tests (never commit)
+/pkcore/src/test/fixtures-local/
