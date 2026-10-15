@@ -20,6 +20,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "gbflash-android"
+rootProject.name = "coincell"
 include(":app")
 include(":pkcore")

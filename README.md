@@ -1,4 +1,4 @@
-# gbflash-android
+# Coincell
 
 Android app for backing up and restoring Game Boy, Game Boy Color and Game Boy Advance save games with a [GBFlash](https://github.com/simonkwng/GBFlash) cartridge reader over USB-OTG.
 
