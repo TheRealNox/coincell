@@ -39,3 +39,6 @@ local.properties
 
 # Personal GBA save fixtures for :app tests (never commit)
 /app/src/test/fixtures-local/
+
+# Release signing (password for the keystore in C:/Users/Nox/keystores)
+key.properties

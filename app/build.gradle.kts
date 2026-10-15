@@ -1,5 +1,6 @@
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -85,6 +86,14 @@ val preparePokemonSprites = if (hasPkAssets) {
     null
 }
 
+// ---- release signing ----------------------------------------------------------------------------------------------
+// key.properties (git-ignored, repo root) points at the keystore outside the repo. Without it the release build
+// stays unsigned and cannot be installed.
+val keyProperties = Properties().apply {
+    val f = rootProject.file("key.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
 android {
     namespace = "org.noxeng.coincell"
     compileSdk {
@@ -99,9 +108,26 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        if (keyProperties.isNotEmpty()) {
+            create("release") {
+                storeFile = file(keyProperties.getProperty("storeFile"))
+                storePassword = keyProperties.getProperty("storePassword")
+                keyAlias = keyProperties.getProperty("keyAlias")
+                keyPassword = keyProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            // Installs next to the release build ("Coincell Dev"), so development never touches the real library.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-dev"
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
