@@ -30,6 +30,20 @@ your saves somewhere safe before that happens.
 - **Private by design**: no internet permission, no account, no analytics. Your saves never leave the phone unless
   you export them.
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/images/screenshots/backup-to-library.gif" width="260" alt="Backing up a cartridge, then opening the new backup in the library">
+  &nbsp;&nbsp;
+  <img src="docs/images/screenshots/pokemon-editor.gif" width="260" alt="Browsing a Pokémon Crystal save in the editor">
+</p>
+
+| Library | Cartridge read | Backup complete |
+|:---:|:---:|:---:|
+| <img src="docs/images/screenshots/library.png" width="240" alt="The save library"> | <img src="docs/images/screenshots/cartridge-read.png" width="240" alt="A cartridge header read on the Device tab"> | <img src="docs/images/screenshots/backup-complete.png" width="240" alt="A verified backup"> |
+| **Pokémon editor** | **Pokémon summary** | **Species picker** |
+| <img src="docs/images/screenshots/editor-overview.png" width="240" alt="Editor overview with trainer, Pokédex and party"> | <img src="docs/images/screenshots/pokemon-summary.png" width="240" alt="A Pokémon's summary in the editor"> | <img src="docs/images/screenshots/species-picker.png" width="240" alt="The searchable species picker"> |
+
 ## Disclaimer
 
 **Use Coincell at your own risk.** It is provided as is, without any warranty (see sections 15 and 16 of the
