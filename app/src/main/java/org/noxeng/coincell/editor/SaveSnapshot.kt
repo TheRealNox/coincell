@@ -7,6 +7,20 @@ import org.noxeng.coincell.pkcore.SaveFile
 import org.noxeng.coincell.pkcore.SlotRef
 import org.noxeng.coincell.pkcore.Trainer
 
+/** Pokedex progress: species marked seen and caught, out of [total] (151 in Generation 1, 251 in Generation 2). */
+data class DexCounts(val seen: Int, val caught: Int, val total: Int) {
+    companion object {
+        fun of(save: SaveFile): DexCounts {
+            val total = PokemonEdits.maxSpecies(save.generation)
+            return DexCounts(
+                seen = (1..total).count { save.isSeen(it) },
+                caught = (1..total).count { save.isCaught(it) },
+                total = total,
+            )
+        }
+    }
+}
+
 /** Immutable read-out of a [SaveFile] (everything the editor screens show), cheap to compare for the change summary. */
 data class SaveSnapshot(
     val trainer: Trainer,
@@ -14,6 +28,7 @@ data class SaveSnapshot(
     val boxes: List<BoxSummary>,
     val inventory: Inventory,
     val currentBox: Int,
+    val dex: DexCounts,
 ) {
     fun pokemonAt(slot: SlotRef): PokemonSummary? = when (slot) {
         is SlotRef.Party -> party.getOrNull(slot.index)
@@ -29,6 +44,6 @@ data class SaveSnapshot(
 
     companion object {
         fun of(save: SaveFile): SaveSnapshot =
-            SaveSnapshot(save.trainer, save.party, save.boxes, save.inventory, save.currentBox)
+            SaveSnapshot(save.trainer, save.party, save.boxes, save.inventory, save.currentBox, DexCounts.of(save))
     }
 }

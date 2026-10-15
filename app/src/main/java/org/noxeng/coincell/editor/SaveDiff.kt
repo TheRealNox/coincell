@@ -33,6 +33,12 @@ object SaveDiff {
         if (o.playTime != n.playTime) out += "play time ${time(o.playTime)}→${time(n.playTime)}"
         if (o.rivalName != n.rivalName) out += "rival ${o.rivalName}→${n.rivalName}"
         if (o.gender != n.gender) out += "gender ${o.gender}→${n.gender}"
+        // Adding a Pokemon or changing its species marks it in the Pokedex, which is saved with it.
+        val dex = listOfNotNull(
+            "caught ${b.dex.caught}→${a.dex.caught}".takeIf { b.dex.caught != a.dex.caught },
+            "seen ${b.dex.seen}→${a.dex.seen}".takeIf { b.dex.seen != a.dex.seen },
+        )
+        if (dex.isNotEmpty()) out += "Pokedex " + dex.joinToString(", ")
         return out.map { Change(Change.Area.TRAINER, it) }
     }
 

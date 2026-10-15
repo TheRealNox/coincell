@@ -2,6 +2,7 @@ package org.noxeng.coincell
 
 import org.noxeng.coincell.editor.Badges
 import org.noxeng.coincell.editor.Change
+import org.noxeng.coincell.editor.DexCounts
 import org.noxeng.coincell.editor.DvStat
 import org.noxeng.coincell.editor.PokemonEdits
 import org.noxeng.coincell.editor.PokemonSaveKind
@@ -211,7 +212,8 @@ class EditorLogicTest {
             PokemonEdits.setSpecies(it, 20)
             PokemonEdits.setNickname(it, "RATICATE")
         }
-        assertEquals(listOf("Raticate: Rattata→Raticate, nickname"), editor.changes().map { it.text })
+        // Raticate is new to the Pokedex: the species change marks it seen and caught, and the summary says so.
+        assertEquals(listOf("Raticate: Rattata→Raticate, nickname", "Pokedex caught 3→4, seen 3→4"), editor.changes().map { it.text })
     }
 
     @Test
@@ -225,7 +227,21 @@ class EditorLogicTest {
         assertTrue(texts.toString(), texts.contains("removed Rattata L4 (box 1)"))
         assertTrue(texts.toString(), texts.any { it.startsWith("added Pikachu") })
         assertTrue(texts.toString(), texts.any { it.startsWith("added Raichu") })
-        assertEquals(texts.toString(), 3, texts.size)
+        assertTrue(texts.toString(), texts.contains("Pokedex caught 3→5, seen 3→5"))
+        assertEquals(texts.toString(), 4, texts.size)
+    }
+
+    @Test
+    fun dex_countsSeenAndCaughtOutOfTheGeneration() {
+        val crystal = SaveEditor.open(EditorTestSaves.crystal()).snapshot().dex
+        assertEquals(DexCounts(seen = 3, caught = 3, total = 251), crystal)
+        val blue = SaveEditor.open(EditorTestSaves.blue()).snapshot().dex
+        assertEquals(DexCounts(seen = 1, caught = 1, total = 151), blue)
+        // an edit that does not touch the species leaves the Pokedex alone
+        val editor = SaveEditor.open(EditorTestSaves.crystal())
+        editor.edit(SlotRef.Party(0)) { PokemonEdits.setLevel(it, 50) }
+        assertEquals(crystal, editor.snapshot().dex)
+        assertTrue(editor.changes().none { it.text.startsWith("Pokedex") })
     }
 
     @Test

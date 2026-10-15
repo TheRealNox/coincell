@@ -24,6 +24,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
@@ -40,8 +41,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import org.noxeng.coincell.editor.Badges
+import org.noxeng.coincell.editor.DexCounts
 import org.noxeng.coincell.editor.PokemonSaveInfo
 import org.noxeng.coincell.editor.SaveEditor
 import org.noxeng.coincell.editor.SaveSnapshot
@@ -92,6 +97,7 @@ fun EditorOverviewScreen(
         ) {
             ui.info?.let { InfoRow(it, ui.parent?.timestampMillis) }
             TrainerCard(snapshot.trainer, model, onClick = onOpenTrainer)
+            DexCard(snapshot.dex)
             SectionHeader("Party")
             PartyStrip(snapshot, onOpenPokemon)
             NavRow(Icons.Filled.CatchingPokemon, "Party & Boxes", "${snapshot.party.size} in the party, ${snapshot.boxedCount} in the boxes", onOpenBoxes)
@@ -123,6 +129,33 @@ private fun InfoRow(info: PokemonSaveInfo, parentMillis: Long?) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/** Pokedex progress: caught and seen, each with a bar, out of the generation's species. */
+@Composable
+private fun DexCard(dex: DexCounts) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Pokedex", style = MaterialTheme.typography.titleMedium)
+            DexBar("Caught", dex.caught, dex.total)
+            DexBar("Seen", dex.seen, dex.total)
+        }
+    }
+}
+
+@Composable
+private fun DexBar(label: String, count: Int, total: Int) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth()) {
+            Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            Text("$count / $total", style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Monospace)
+        }
+        LinearProgressIndicator(
+            progress = { if (total == 0) 0f else count.toFloat() / total },
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "$label $count of $total" },
+            drawStopIndicator = {},
+        )
     }
 }
 
