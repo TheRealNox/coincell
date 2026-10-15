@@ -9,7 +9,7 @@ plugins {
 }
 
 // ---- optional Pokemon sprite pack (pkassets/) -------------------------------------------------------------------
-// The pack is Nintendo artwork for private use only and must stay removable (pkassets/README.md). It is wired in
+// The pack is Nintendo artwork, not GPL-3.0, and stays optional (pkassets/README.md). It is wired in
 // only when the directory exists: the task below copies the sprites the editor uses plus a slim lookup index
 // (sprites/index.json) into generated assets. Without pkassets/ nothing is added and the app shows text and initials.
 val pkassetsAssets = rootProject.file("pkassets/src/main/assets")
@@ -104,8 +104,8 @@ android {
         applicationId = "org.noxeng.coincell"
         minSdk = 26
         targetSdk = 37
-        versionCode = 3
-        versionName = "0.2.1"
+        versionCode = 4
+        versionName = "0.2.2"
     }
 
     signingConfigs {
