@@ -25,6 +25,7 @@ class SpriteIndex private constructor(
     private val entries: Map<String, String>,
     private val gen1Items: List<Int>,
     private val gen2Items: List<Int>,
+    private val gen3Items: List<Int>,
 ) {
     /** False when the pack is absent: callers then show text and initials only. */
     val available: Boolean get() = entries.isNotEmpty()
@@ -50,10 +51,14 @@ class SpriteIndex private constructor(
         return out.distinct()
     }
 
-    /** Paths for a bag or held item (Gen 1 bag ids and Gen 2 ids converted to the pack's ids); outline art first on dark backgrounds. */
+    /** Paths for a bag or held item (Gen 1 bag ids and Gen 2/3 ids converted to the pack's ids); outline art first on dark backgrounds. */
     fun item(generation: Int, itemId: Int, dark: Boolean): List<String> {
         if (!available) return emptyList()
-        val map = if (generation == 1) gen1Items else gen2Items
+        val map = when (generation) {
+            1 -> gen1Items
+            2 -> gen2Items
+            else -> gen3Items
+        }
         val modern = map.getOrNull(itemId) ?: 0
         if (modern <= 0) return emptyList()
         val keys = if (dark) listOf("item_outline/$modern", "item/$modern") else listOf("item/$modern")
@@ -63,7 +68,7 @@ class SpriteIndex private constructor(
     companion object {
         const val INDEX_FILE = "sprites/index.json"
 
-        val EMPTY = SpriteIndex(emptyMap(), emptyList(), emptyList())
+        val EMPTY = SpriteIndex(emptyMap(), emptyList(), emptyList(), emptyList())
 
         /** Reads [INDEX_FILE]; a missing or unreadable index is [EMPTY], never an error. */
         fun load(source: AssetSource): SpriteIndex = try {
@@ -77,7 +82,7 @@ class SpriteIndex private constructor(
             val entries = root["entries"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content }.orEmpty()
             val maps = root["itemMaps"] as? JsonObject
             fun ints(name: String): List<Int> = (maps?.get(name) as? JsonArray)?.map { it.jsonPrimitive.int }.orEmpty()
-            SpriteIndex(entries, ints("gen1"), ints("gen2"))
+            SpriteIndex(entries, ints("gen1"), ints("gen2"), ints("gen3"))
         } catch (_: Exception) {
             EMPTY
         }
@@ -117,7 +122,7 @@ data class PokemonSpriteKey(val species: Int, val shiny: Boolean, val form: Int,
 object SpriteRules {
     const val UNOWN = 201
 
-    /** Unown's letter (0 = A ... 25 = Z) from the DVs, exactly as the Gen 2 games and PKHeX derive it. */
+    /** Unown's letter (0 = A ... 25 = Z) from the DVs, exactly as the Gen 2 games and PKHeX derive it (Gen 3 uses the PID). */
     fun unownForm(dvs: org.noxeng.coincell.pkcore.Dvs): Int {
         var form = 0
         form = form or ((dvs.attack and 0x6) shl 5)
@@ -130,7 +135,7 @@ object SpriteRules {
     fun keyOf(p: org.noxeng.coincell.pkcore.PokemonSummary): PokemonSpriteKey = PokemonSpriteKey(
         species = p.species,
         shiny = p.isShiny,
-        form = if (p.species == UNOWN) unownForm(p.dvs) else 0,
+        form = if (p.species == UNOWN) p.form else 0,
         female = p.gender == org.noxeng.coincell.pkcore.Gender.FEMALE,
         egg = p.isEgg,
     )

@@ -29,6 +29,9 @@ public enum class StringOption {
 
     /** Fill with 0x7F (space) first. */
     CLEAR_7F,
+
+    /** Fill with 0xFF first (the Generation 3 terminator). */
+    CLEAR_FF,
 }
 
 /** Generation 1 text encoding (also the base of [StringConverter2]). */
@@ -124,6 +127,7 @@ public object StringConverter1 {
             StringOption.CLEAR_ZERO -> dest.fill(0, offset, offset + length)
             StringOption.CLEAR_50 -> dest.fill(TERMINATOR_CODE.toByte(), offset, offset + length)
             StringOption.CLEAR_7F -> dest.fill(SPACE_CODE.toByte(), offset, offset + length)
+            StringOption.CLEAR_FF -> dest.fill(0xFF.toByte(), offset, offset + length)
             StringOption.NONE -> Unit
         }
     }

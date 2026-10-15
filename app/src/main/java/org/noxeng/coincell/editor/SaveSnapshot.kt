@@ -7,7 +7,7 @@ import org.noxeng.coincell.pkcore.SaveFile
 import org.noxeng.coincell.pkcore.SlotRef
 import org.noxeng.coincell.pkcore.Trainer
 
-/** Pokedex progress: species marked seen and caught, out of [total] (151 in Generation 1, 251 in Generation 2). */
+/** Pokedex progress: species marked seen and caught, out of [total] (151, 251 or 386 by generation). */
 data class DexCounts(val seen: Int, val caught: Int, val total: Int) {
     companion object {
         fun of(save: SaveFile): DexCounts {
@@ -32,7 +32,7 @@ data class SaveSnapshot(
 ) {
     fun pokemonAt(slot: SlotRef): PokemonSummary? = when (slot) {
         is SlotRef.Party -> party.getOrNull(slot.index)
-        is SlotRef.Box -> boxes.getOrNull(slot.box)?.pokemon?.getOrNull(slot.index)
+        is SlotRef.Box -> boxes.getOrNull(slot.box)?.slots?.getOrNull(slot.index)
     }
 
     val boxedCount: Int get() = boxes.sumOf { it.pokemon.size }
@@ -40,7 +40,7 @@ data class SaveSnapshot(
     /** Every Pokemon with its place, party first. */
     fun all(): List<Pair<SlotRef, PokemonSummary>> =
         party.mapIndexed { i, p -> SlotRef.Party(i) to p } +
-            boxes.flatMap { b -> b.pokemon.mapIndexed { i, p -> SlotRef.Box(b.index, i) to p } }
+            boxes.flatMap { b -> b.slots.mapIndexedNotNull { i, p -> p?.let { SlotRef.Box(b.index, i) to it } } }
 
     companion object {
         fun of(save: SaveFile): SaveSnapshot =

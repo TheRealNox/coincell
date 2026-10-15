@@ -387,15 +387,10 @@ fun BackupDetailScreen(
                 }
             }
             when (ui.pokemon) {
-                is PokemonSaveKind.Gen12 -> Button(onClick = onOpenEditor, Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                is PokemonSaveKind.Editable -> Button(onClick = onOpenEditor, Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Icon(Icons.Filled.CatchingPokemon, contentDescription = null, Modifier.size(18.dp))
                     Text("Open in Pokemon editor", Modifier.padding(start = 8.dp))
                 }
-                PokemonSaveKind.GbaLater -> Text(
-                    "Pokemon editor for GBA games comes later",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 else -> Unit
             }
             FilledTonalButton(onClick = { actions.export(entry) }, Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
@@ -444,12 +439,11 @@ fun BackupDetailScreen(
     }
 }
 
-/** "Pokemon save, Gen 2, Crystal French" for a Gen 1/2 save, a short note for a GBA Pokemon game, nothing otherwise. */
+/** "Pokemon save, Gen 2, Crystal French" for a save the editor opens, nothing otherwise. */
 @Composable
 private fun PokemonChip(kind: PokemonSaveKind?) {
     when (kind) {
-        is PokemonSaveKind.Gen12 -> NeutralChip(kind.info.chipText, Icons.Filled.CatchingPokemon)
-        PokemonSaveKind.GbaLater -> NeutralChip("Pokemon GBA (editor comes later)", Icons.Filled.CatchingPokemon)
+        is PokemonSaveKind.Editable -> NeutralChip(kind.info.chipText, Icons.Filled.CatchingPokemon)
         else -> Unit
     }
 }

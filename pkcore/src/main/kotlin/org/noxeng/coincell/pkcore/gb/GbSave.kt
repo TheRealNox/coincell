@@ -35,6 +35,7 @@ internal abstract class GbSave(
     final override val region: Region = info.region
     final override val generation: Int = info.generation
     final override val partyCapacity: Int = PARTY_CAPACITY
+    final override val compactBoxes: Boolean = true
 
     protected val pristine: ByteArray = original.copyOf()
 
@@ -120,7 +121,8 @@ internal abstract class GbSave(
 
     final override val boxes: List<BoxSummary>
         get() = List(boxCount) { i ->
-            BoxSummary(i, boxName(i), i == currentBox, boxCapacity, boxLists[i].map { it.pk.summary(strings) })
+            val list = boxLists[i].map { it.pk.summary(strings) }
+            BoxSummary(i, boxName(i), i == currentBox, boxCapacity, List(boxCapacity) { slot -> list.getOrNull(slot) })
         }
 
     private fun containerOf(slot: SlotRef): MutableList<Slot> = when (slot) {

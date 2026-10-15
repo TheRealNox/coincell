@@ -295,10 +295,10 @@ class EditorLogicTest {
         assertEquals(123_456, after.money)
         assertEquals(777, after.coins)
         assertEquals(8, after.badgeCount)
-        assertEquals(16, Badges.list(2, 2).size)
-        assertEquals(8, Badges.list(1, 2).size)
-        assertEquals("Zéphyr", Badges.list(2, 3).first().name)
-        assertEquals("Boulder", Badges.list(1, 2).first().name)
+        assertEquals(16, Badges.list(Game.CRYSTAL, 2).size)
+        assertEquals(8, Badges.list(Game.RED_BLUE, 2).size)
+        assertEquals("Zéphyr", Badges.list(Game.GOLD_SILVER, 3).first().name)
+        assertEquals("Boulder", Badges.list(Game.YELLOW, 2).first().name)
         val texts = editor.changes().map { it.text }
         assertTrue(texts.toString(), texts.containsAll(listOf("name GOLD→ASH", "money 3000→123456", "coins 0→777", "badges 0→8")))
     }
@@ -308,10 +308,10 @@ class EditorLogicTest {
     @Test
     fun probe_gen12SaveIsRecognised_withTheChipText() {
         val kind = PokemonSaveProbe.probe(EditorTestSaves.crystalGame, EditorTestSaves.crystal())
-        kind as PokemonSaveKind.Gen12
+        kind as PokemonSaveKind.Editable
         assertEquals(Game.CRYSTAL, kind.info.game)
         assertEquals("Pokemon save · Gen 2 · Crystal English", kind.info.chipText)
-        val blue = PokemonSaveProbe.probe(EditorTestSaves.blueGame, EditorTestSaves.blue()) as PokemonSaveKind.Gen12
+        val blue = PokemonSaveProbe.probe(EditorTestSaves.blueGame, EditorTestSaves.blue()) as PokemonSaveKind.Editable
         assertEquals("Pokemon save · Gen 1 · Red/Blue English", blue.info.chipText)
     }
 
@@ -323,21 +323,21 @@ class EditorLogicTest {
     }
 
     @Test
-    fun probe_gbaPokemonGames_sayTheEditorComesLater() {
-        assertEquals(PokemonSaveKind.GbaLater, PokemonSaveProbe.byGame(EditorTestSaves.sapphire))
+    fun probe_otherGbaGames_areNotSupported_pokemonOnesLetTheBytesDecide() {
         for (code in listOf("AXVE", "AXPF", "BPRE", "BPGD", "BPEE")) {
-            assertEquals(code, PokemonSaveKind.GbaLater, PokemonSaveProbe.byGame(EditorTestSaves.sapphire.copy(gameCode = code)))
+            assertNull(code, PokemonSaveProbe.byGame(EditorTestSaves.sapphire.copy(gameCode = code)))
         }
         assertEquals(PokemonSaveKind.NotSupported, PokemonSaveProbe.byGame(EditorTestSaves.sapphire.copy(gameCode = "AMKE", title = "MARIOKART")))
+        assertNull(PokemonSaveProbe.byGame(EditorTestSaves.sapphire.copy(gameCode = null))) // an imported file: the bytes decide
         assertNull(PokemonSaveProbe.byGame(EditorTestSaves.crystalGame)) // GB / GBC: the bytes decide
     }
 
     @Test
     fun realSaves_areRecognisedWithTheirLanguage() {
         val blue = EditorTestSaves.realBlueOrSkip()
-        assertEquals("Pokemon save · Gen 1 · Red/Blue French", (PokemonSaveProbe.probeBytes(blue) as PokemonSaveKind.Gen12).info.chipText)
+        assertEquals("Pokemon save · Gen 1 · Red/Blue French", (PokemonSaveProbe.probeBytes(blue) as PokemonSaveKind.Editable).info.chipText)
         val crystal = EditorTestSaves.realCrystalOrSkip()
-        assertEquals("Pokemon save · Gen 2 · Crystal French", (PokemonSaveProbe.probeBytes(crystal) as PokemonSaveKind.Gen12).info.chipText)
+        assertEquals("Pokemon save · Gen 2 · Crystal French", (PokemonSaveProbe.probeBytes(crystal) as PokemonSaveKind.Editable).info.chipText)
     }
 
     @Test

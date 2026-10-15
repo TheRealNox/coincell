@@ -65,7 +65,7 @@ class SaveDetectionTest {
         assertUnsupported(ByteArray(0x8030), "size")
         assertUnsupported(ByteArray(0x4000), "size")
         assertUnsupported(ByteArray(0), "size")
-        assertUnsupported(ByteArray(0x20000), "size")
+        assertUnsupported(ByteArray(0x10001), "size")
     }
 
     @Test
@@ -73,6 +73,7 @@ class SaveDetectionTest {
         assertUnsupported(ByteArray(0x8000), "Not a recognised")
         assertUnsupported(ByteArray(0x8000) { 0xFF.toByte() }, "Not a recognised")
         assertUnsupported(ByteArray(0x10000), "Not a recognised")
+        assertUnsupported(ByteArray(0x20000), "Not a recognised Generation 3") // the Gen 3 size, but no save sectors
         val rnd = Random(42)
         repeat(20) {
             val noise = ByteArray(0x8000).also { rnd.nextBytes(it) }

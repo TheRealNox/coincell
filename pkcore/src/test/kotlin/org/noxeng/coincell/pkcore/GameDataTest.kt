@@ -14,12 +14,12 @@ class GameDataTest {
     fun everyLanguageHasCompleteNameLists() {
         for (lang in GameStrings.supportedLanguages) {
             val s = GameStrings.forLanguage(lang)
-            assertEquals("species $lang", 252, s.species.size)
-            assertEquals("moves $lang", 252, s.moves.size)
+            assertEquals("species $lang", 387, s.species.size)
+            assertEquals("moves $lang", 355, s.moves.size)
             assertEquals("items1 $lang", 256, s.itemsGen1.size)
             assertEquals("items2 $lang", 256, s.itemsGen2.size)
-            for (id in 1..251) assertTrue("species $id in $lang", s.speciesName(id).isNotBlank())
-            for (id in 1..251) assertTrue("move $id in $lang", s.moveName(id).isNotBlank())
+            for (id in 1..386) assertTrue("species $id in $lang", s.speciesName(id).isNotBlank())
+            for (id in 1..354) assertTrue("move $id in $lang", s.moveName(id).isNotBlank())
             assertTrue(s.itemName(2, 5).isNotBlank())
         }
     }

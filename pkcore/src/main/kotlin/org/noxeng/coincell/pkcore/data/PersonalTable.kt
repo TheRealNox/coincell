@@ -1,5 +1,6 @@
-// Ported from PKHeX.Core/PersonalInfo/Info/PersonalInfo1.cs, PersonalInfo2.cs, Table/PersonalTable1.cs,
-// Table/PersonalTable2.cs (PKHeX, GPL-3.0, commit 641c26b). Data: Resources/byte/personal/personal_{rb,y,gs,c}.
+// Ported from PKHeX.Core/PersonalInfo/Info/PersonalInfo1.cs, PersonalInfo2.cs, PersonalInfo3.cs, Table/PersonalTable1.cs,
+// Table/PersonalTable2.cs, Table/PersonalTable3.cs (PKHeX, GPL-3.0, commit 641c26b).
+// Data: Resources/byte/personal/personal_{rb,y,gs,c,rs,e,fr,lg}.
 package org.noxeng.coincell.pkcore.data
 
 /** Loads the packaged binary/text resources of this module. */
@@ -21,23 +22,63 @@ public class PersonalInfo internal constructor(internal val raw: ByteArray, publ
     private fun u8(ofs: Int): Int = raw[ofs].toInt() and 0xFF
 
     /** Gender ratio byte (254 = female only, 255 = genderless, 0 = male only, else threshold). */
-    public val gender: Int get() = if (generation == 1) u8(0x00) else u8(0x0D)
-    public val hp: Int get() = u8(0x01)
-    public val atk: Int get() = u8(0x02)
-    public val def: Int get() = u8(0x03)
-    public val spe: Int get() = u8(0x04)
+    public val gender: Int get() = when (generation) {
+        1 -> u8(0x00)
+        2 -> u8(0x0D)
+        else -> u8(0x10)
+    }
+    public val hp: Int get() = if (generation == 3) u8(0x00) else u8(0x01)
+    public val atk: Int get() = if (generation == 3) u8(0x01) else u8(0x02)
+    public val def: Int get() = if (generation == 3) u8(0x02) else u8(0x03)
+    public val spe: Int get() = if (generation == 3) u8(0x03) else u8(0x04)
 
     /** Special Attack. Generation 1 has a single Special stat. */
-    public val spa: Int get() = u8(0x05)
+    public val spa: Int get() = if (generation == 3) u8(0x04) else u8(0x05)
 
     /** Special Defense. Generation 1 has a single Special stat, so this equals [spa]. */
-    public val spd: Int get() = if (generation == 1) u8(0x05) else u8(0x06)
-    public val type1: Int get() = if (generation == 1) u8(0x06) else u8(0x07)
-    public val type2: Int get() = if (generation == 1) u8(0x07) else u8(0x08)
-    public val catchRate: Int get() = if (generation == 1) u8(0x08) else u8(0x09)
-    public val baseExp: Int get() = if (generation == 1) u8(0x09) else u8(0x0A)
-    public val expGrowth: Int get() = if (generation == 1) u8(0x13) else u8(0x16)
-    public val baseFriendship: Int get() = if (generation == 1) 0 else 70
+    public val spd: Int get() = when (generation) {
+        1 -> u8(0x05)
+        2 -> u8(0x06)
+        else -> u8(0x05)
+    }
+    public val type1: Int get() = when (generation) {
+        1 -> u8(0x06)
+        2 -> u8(0x07)
+        else -> u8(0x06)
+    }
+    public val type2: Int get() = when (generation) {
+        1 -> u8(0x07)
+        2 -> u8(0x08)
+        else -> u8(0x07)
+    }
+    public val catchRate: Int get() = when (generation) {
+        1 -> u8(0x08)
+        2 -> u8(0x09)
+        else -> u8(0x08)
+    }
+    public val baseExp: Int get() = when (generation) {
+        1 -> u8(0x09)
+        2 -> u8(0x0A)
+        else -> u8(0x09)
+    }
+    public val expGrowth: Int get() = when (generation) {
+        1 -> u8(0x13)
+        2 -> u8(0x16)
+        else -> u8(0x13)
+    }
+    public val baseFriendship: Int get() = when (generation) {
+        1 -> 0
+        2 -> 70
+        else -> u8(0x12)
+    }
+
+    /** Generation 3: the two ability ids (equal when the species has a single ability); 0 before Generation 3. */
+    public val ability1: Int get() = if (generation == 3) u8(0x16) else 0
+    public val ability2: Int get() = if (generation == 3) u8(0x17) else 0
+    public val hasSecondAbility: Boolean get() = ability1 != ability2
+
+    /** Generation 3 ability for the stored ability bit (PKHeX `PersonalInfo3.GetAbility`). */
+    public fun getAbility(second: Boolean): Int = if (second && hasSecondAbility) ability2 else ability1
 
     public companion object {
         public const val RATIO_MAGIC_GENDERLESS: Int = 255
@@ -73,5 +114,17 @@ public class PersonalTable internal constructor(private val entries: List<Person
 
         /** Crystal. 252 entries. */
         public val C: PersonalTable by lazy { load("c", 2, 0x20) }
+
+        /** Ruby/Sapphire. 387 entries by National Dex id (the files are already in national order). */
+        public val RS: PersonalTable by lazy { load("rs", 3, 0x1C) }
+
+        /** Emerald. */
+        public val E: PersonalTable by lazy { load("e", 3, 0x1C) }
+
+        /** FireRed (Deoxys is its Attack Forme). */
+        public val FR: PersonalTable by lazy { load("fr", 3, 0x1C) }
+
+        /** LeafGreen (Deoxys is its Defense Forme). */
+        public val LG: PersonalTable by lazy { load("lg", 3, 0x1C) }
     }
 }

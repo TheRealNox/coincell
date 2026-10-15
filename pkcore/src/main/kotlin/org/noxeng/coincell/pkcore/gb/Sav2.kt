@@ -213,7 +213,7 @@ internal class Sav2(bytes: ByteArray, info: SaveTypeInfo, requestedLanguage: Int
         }
         if (trainer.rivalName != old.rivalName) {
             StringConverter2.setString(
-                data, off.rival, trainerNameLength, trainer.rivalName, trainerNameLength, language, StringOption.CLEAR_50,
+                data, off.rival, trainerNameLength, trainer.rivalName.orEmpty(), trainerNameLength, language, StringOption.CLEAR_50,
             )
         }
         if (trainer.coins != old.coins) data.setU16be(off.money + 7, trainer.coins.coerceIn(0, MAX_COINS))

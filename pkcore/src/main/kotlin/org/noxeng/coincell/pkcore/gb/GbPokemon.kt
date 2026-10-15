@@ -4,6 +4,7 @@ package org.noxeng.coincell.pkcore.gb
 
 import org.noxeng.coincell.pkcore.CaughtData
 import org.noxeng.coincell.pkcore.Dvs
+import org.noxeng.coincell.pkcore.EditablePokemon
 import org.noxeng.coincell.pkcore.Gender
 import org.noxeng.coincell.pkcore.MoveSlot
 import org.noxeng.coincell.pkcore.Pokemon
@@ -51,13 +52,13 @@ public abstract class GbPokemon internal constructor(
     internal val otTrash: ByteArray,
     internal val nickTrash: ByteArray,
     internal val layout: GbLayout,
-) : Pokemon {
+) : EditablePokemon {
     /** Language assumed for text decoding when it can't be guessed from the nickname (the save's language). */
     public var fallbackLanguage: Int = LanguageId.ENGLISH
 
-    public val isJapanese: Boolean get() = otTrash.size == STRING_LENGTH_JAPANESE
-    public val maxTrainerNameLength: Int get() = if (isJapanese) 5 else 7
-    public val maxNicknameLength: Int get() = if (isJapanese) 5 else 10
+    override val isJapanese: Boolean get() = otTrash.size == STRING_LENGTH_JAPANESE
+    override val maxTrainerNameLength: Int get() = if (isJapanese) 5 else 7
+    override val maxNicknameLength: Int get() = if (isJapanese) 5 else 10
 
     internal abstract val personalInfo: PersonalInfo
     internal abstract fun decodeText(buffer: ByteArray): String
@@ -78,7 +79,7 @@ public abstract class GbPokemon internal constructor(
     abstract override var species: Int
 
     /** Experience points (24 bit, big endian). */
-    public var exp: Int
+    override var exp: Int
         get() = (u8(layout.exp) shl 16) or (u16(layout.exp + 1))
         set(value) {
             // PKHeX writes `(value << 8) | Data[next]` as a big-endian u32, which preserves the following byte.
@@ -88,38 +89,40 @@ public abstract class GbPokemon internal constructor(
         }
 
     /** Level stored in the data (party level in Gen 1/2). */
-    public abstract var storedLevel: Int
+    abstract override var storedLevel: Int
+
+    override val expGrowth: Int get() = personalInfo.expGrowth
 
     /** Level derived from [exp] (PKHeX `CurrentLevel`). Setting it also sets [exp] and the stored level. */
-    public var level: Int
+    override var level: Int
         get() = Experience.getLevel(exp.toLong(), personalInfo.expGrowth)
         set(value) {
             storedLevel = value
             exp = Experience.getExp(value, personalInfo.expGrowth).toInt()
         }
 
-    public var trainerId: Int
+    override var trainerId: Int
         get() = u16(layout.tid)
         set(value) = setU16(layout.tid, value)
 
     // ---- moves -----------------------------------------------------------------------------------------------------
-    public fun getMove(index: Int): Int = u8(layout.moves + index)
-    public fun setMove(index: Int, move: Int): Unit = setU8(layout.moves + index, move)
+    override fun getMove(index: Int): Int = u8(layout.moves + index)
+    override fun setMove(index: Int, move: Int): Unit = setU8(layout.moves + index, move)
 
-    public fun getMovePp(index: Int): Int = u8(layout.pp + index) and 0x3F
-    public fun setMovePp(index: Int, pp: Int): Unit = setU8(layout.pp + index, (u8(layout.pp + index) and 0xC0) or min(63, pp))
+    override fun getMovePp(index: Int): Int = u8(layout.pp + index) and 0x3F
+    override fun setMovePp(index: Int, pp: Int): Unit = setU8(layout.pp + index, (u8(layout.pp + index) and 0xC0) or min(63, pp))
 
-    public fun getMovePpUps(index: Int): Int = (u8(layout.pp + index) and 0xC0) shr 6
-    public fun setMovePpUps(index: Int, ups: Int): Unit = setU8(layout.pp + index, (u8(layout.pp + index) and 0x3F) or ((ups and 3) shl 6))
+    override fun getMovePpUps(index: Int): Int = (u8(layout.pp + index) and 0xC0) shr 6
+    override fun setMovePpUps(index: Int, ups: Int): Unit = setU8(layout.pp + index, (u8(layout.pp + index) and 0x3F) or ((ups and 3) shl 6))
 
     /** PP of [move] with [ppUps] applied (PKHeX `GBPKM.GetMovePP`). */
-    public fun getMaxPp(move: Int, ppUps: Int): Int {
+    override fun getMaxPp(move: Int, ppUps: Int): Int {
         val pp = MoveInfo.getBasePp(generation, move)
         return pp + ppUps * min(7, pp / 5)
     }
 
     /** Restores PP of every move to its maximum with the current PP Ups. */
-    public fun healPp() {
+    override fun healPp() {
         for (i in 0 until 4) setMovePp(i, getMaxPp(getMove(i), getMovePpUps(i)))
     }
 
@@ -169,15 +172,15 @@ public abstract class GbPokemon internal constructor(
         set(value) = setU16(layout.statExp + 8, value)
 
     // ---- party data ---------------------------------------------------------------------------------------------------
-    public var status: Int
+    override var status: Int
         get() = u8(layout.status)
         set(value) = setU8(layout.status, value)
 
-    public var currentHp: Int
+    override var currentHp: Int
         get() = u16(layout.hpCurrent)
         set(value) = setU16(layout.hpCurrent, value)
 
-    public var maxHp: Int
+    override var maxHp: Int
         get() = u16(layout.battleStats)
         set(value) = setU16(layout.battleStats, value)
 
@@ -193,7 +196,7 @@ public abstract class GbPokemon internal constructor(
     }
 
     /** True once party stats are present, false for data that came from a box. */
-    public val partyStatsPresent: Boolean get() = maxHp != 0
+    override val partyStatsPresent: Boolean get() = maxHp != 0
 
     // ---- derived -------------------------------------------------------------------------------------------------------
     public val isShiny: Boolean get() = generation == 2 && DvUtil.isShiny(dv16)
@@ -234,7 +237,7 @@ public abstract class GbPokemon internal constructor(
     }
 
     /** Recomputes the party stats, level and clears the status (PKHeX `ResetPartyStats`). */
-    public fun resetPartyStats() {
+    override fun resetPartyStats() {
         val s = calculateStats()
         maxHp = s.hp
         currentHp = s.hp
@@ -248,7 +251,7 @@ public abstract class GbPokemon internal constructor(
     }
 
     /** [resetPartyStats] followed by [healPp] (PKHeX `Heal`). */
-    public fun heal() {
+    override fun heal() {
         resetPartyStats()
         healPp()
     }
@@ -272,7 +275,7 @@ public abstract class GbPokemon internal constructor(
         }
 
     /** True if the nickname buffer (including trash) differs from the default species name. */
-    public val isNicknamed: Boolean get() = !nickTrash.contentEquals(defaultNicknameBytes(textLanguage))
+    override val isNicknamed: Boolean get() = !nickTrash.contentEquals(defaultNicknameBytes(textLanguage))
 
     private fun defaultNicknameBytes(language: Int): ByteArray {
         val expect = ByteArray(nickTrash.size)
@@ -288,14 +291,16 @@ public abstract class GbPokemon internal constructor(
         bytes.copyInto(nickTrash)
     }
 
-    public var nickname: String
+    override fun resetNickname(): Unit = setNotNicknamed()
+
+    override var nickname: String
         get() = decodeText(nickTrash)
         set(value) {
             if (!isNicknamed && nickname == value) return
             setKeepingTerminatorStyle(value.take(maxNicknameLength), nickTrash)
         }
 
-    public var otName: String
+    override var otName: String
         get() = decodeText(otTrash)
         set(value) {
             if (value == otName) return
@@ -351,6 +356,7 @@ public abstract class GbPokemon internal constructor(
             isShiny = isShiny,
             gender = gender,
             hiddenPowerType = hiddenPowerType,
+            form = unownForm,
         )
     }
 

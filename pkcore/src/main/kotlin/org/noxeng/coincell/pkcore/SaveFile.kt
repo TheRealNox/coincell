@@ -3,7 +3,7 @@ package org.noxeng.coincell.pkcore
 
 import org.noxeng.coincell.pkcore.gb.SaveLoader
 
-/** Which game family a save belongs to. Gen 3 (Ruby/Sapphire/Emerald/FireRed/LeafGreen) slots in here later. */
+/** Which game family a save belongs to. */
 public enum class Game(public val generation: Int) {
     /** Red, Blue (and the Japanese Red/Green/Blue); PKHeX can't tell these apart either. */
     RED_BLUE(1),
@@ -12,6 +12,13 @@ public enum class Game(public val generation: Int) {
     /** Gold or Silver (their saves are identical in structure). */
     GOLD_SILVER(2),
     CRYSTAL(2),
+
+    /** Ruby or Sapphire (identical save structure). */
+    RUBY_SAPPHIRE(3),
+    EMERALD(3),
+
+    /** FireRed or LeafGreen (identical save structure). */
+    FIRERED_LEAFGREEN(3),
 }
 
 /** Region family of the save layout. */
@@ -26,7 +33,7 @@ public enum class Region {
 /** Base type of the errors thrown by this module. */
 public open class PkCoreException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
 
-/** The data is not a (supported) Gen 1/2 save, or it is a valid save of an unsupported kind. */
+/** The data is not a (supported) Gen 1-3 save, or it is a valid save of an unsupported kind. */
 public class UnsupportedSaveException(message: String) : PkCoreException(message)
 
 /** An edit operation was refused (bad slot, wrong generation, full container...). */
@@ -46,19 +53,28 @@ public data class Trainer(
     /** Trainer ID (16 bit). */
     val id: Int,
     val money: Int,
-    /** Raw badge bit mask (Gen 1: 8 Kanto badges; Gen 2: Johto in the low byte, Kanto in the high byte). */
+    /**
+     * Raw badge bit mask (Gen 1: 8 Kanto badges; Gen 2: Johto in the low byte, Kanto in the high byte; Gen 3: the 8
+     * badges of the region, Hoenn or Kanto, from the event flags).
+     */
     val badges: Int,
     val playTime: PlayTime,
-    val rivalName: String,
-    /** Crystal only, null where the game has no trainer gender. */
+    /** Null where the save stores no rival name (Ruby, Sapphire, Emerald). */
+    val rivalName: String?,
+    /** Crystal and Generation 3; null where the game has no trainer gender. */
     val gender: TrainerGender?,
     /** Game Corner coins. */
     val coins: Int,
+    /** Generation 3 secret ID (16 bit); null before Generation 3. */
+    val secretId: Int? = null,
 ) {
     val badgeCount: Int get() = Integer.bitCount(badges)
 }
 
-/** Location of a Pokemon in a save. Both [Party] and [Box] indexes are 0-based and contiguous. */
+/**
+ * Location of a Pokemon in a save. Indexes are 0-based. The party is always contiguous; boxes are contiguous in
+ * Generations 1/2 and may have gaps in Generation 3 ([SaveFile.compactBoxes]).
+ */
 public sealed interface SlotRef {
     public data class Party(val index: Int) : SlotRef
     public data class Box(val box: Int, val index: Int) : SlotRef
@@ -70,10 +86,14 @@ public data class BoxSummary(
     val name: String,
     val isCurrent: Boolean,
     val capacity: Int,
-    val pokemon: List<PokemonSummary>,
-)
+    /** Every slot of the box ([capacity] entries), null where it is empty. */
+    val slots: List<PokemonSummary?>,
+) {
+    /** The occupied slots, in slot order. */
+    val pokemon: List<PokemonSummary> get() = slots.filterNotNull()
+}
 
-public enum class PocketType { ITEMS, KEY_ITEMS, TM_HM, BALLS, PC_ITEMS }
+public enum class PocketType { ITEMS, KEY_ITEMS, TM_HM, BALLS, BERRIES, PC_ITEMS }
 
 public data class ItemStack(val id: Int, val count: Int)
 
@@ -85,12 +105,12 @@ public data class ItemPocket(
     val type: PocketType,
     /** Number of slots of the pocket. */
     val capacity: Int,
-    /** Highest quantity of one stack (99). */
+    /** Highest quantity of one stack (99; up to 999 in some Generation 3 pockets). */
     val maxCount: Int,
     val items: List<ItemStack>,
     /** Item ids that may be stored in this pocket (PKHeX `IItemStorage.GetItems`). */
     val validItems: List<Int>,
-    /** Items limited to a single copy (the HMs of Gen 2's TM/HM pocket). */
+    /** Items limited to a single copy (the HMs of the TM/HM pocket). */
     val singleStackItems: Set<Int> = emptySet(),
 ) {
     /** Highest quantity of [itemId] in this pocket (PKHeX `PlayerBag.GetMaxCount`). */
@@ -121,6 +141,12 @@ public interface SaveFile {
     public val boxCapacity: Int
     public val currentBox: Int
 
+    /**
+     * True when box slots are a packed list (Generations 1/2: removing one moves the following ones up and new ones
+     * go at the end); false when every slot stands alone and may stay empty (Generation 3).
+     */
+    public val compactBoxes: Boolean
+
     /** True once any edit was made after loading. */
     public val isModified: Boolean
 
@@ -138,19 +164,23 @@ public interface SaveFile {
     public fun getPokemon(slot: SlotRef): Pokemon?
 
     /**
-     * Writes [pokemon] (a copy of it) at [slot]: replacing an occupied slot or appending at the first free index.
-     * Like PKHeX this also marks the species as seen/caught when [updatePokedex] is set, and computes party stats
-     * for a Pokemon that has none. The Pokemon must be of this save's generation and text format (Japanese or not).
+     * Writes [pokemon] (a copy of it) at [slot]: replacing an occupied slot or filling an empty one (in a compact
+     * container only the first free index). Like PKHeX this also marks the species as seen/caught when
+     * [updatePokedex] is set, and computes party stats for a Pokemon that has none. The Pokemon must be of this save's
+     * generation (and, in Generations 1/2, text format: Japanese or not).
      */
     public fun setPokemon(slot: SlotRef, pokemon: Pokemon, updatePokedex: Boolean = true)
 
-    /** Appends to the first box with room, starting at the current box; returns where it went, or null if all boxes are full. */
+    /** Puts it in the first free box slot, starting at the current box; returns where it went, or null if all boxes are full. */
     public fun addPokemon(pokemon: Pokemon, updatePokedex: Boolean = true): SlotRef?
 
-    /** Removes the Pokemon at [slot]; the following slots move up. Returns it, or null if the slot was empty. */
+    /**
+     * Removes the Pokemon at [slot]; in the party and in compact boxes the following slots move up, otherwise the slot
+     * is left empty. Returns it, or null if the slot was empty.
+     */
     public fun removePokemon(slot: SlotRef): Pokemon?
 
-    /** Moves the Pokemon at [from] to [to]; if [to] is occupied the two are swapped. */
+    /** Moves the Pokemon at [from] to [to]; if [to] is occupied the two are swapped. Compact containers append instead of leaving gaps. */
     public fun movePokemon(from: SlotRef, to: SlotRef)
 
     public val inventory: Inventory
@@ -166,9 +196,10 @@ public interface SaveFile {
 
     public companion object {
         /**
-         * Loads raw SRAM (no RTC footer). [language] forces the text language of international saves; by default
-         * it is guessed from the Pokemon nicknames (English if undecidable).
-         * @throws UnsupportedSaveException if the data isn't a supported Gen 1/2 save.
+         * Loads raw save memory (no RTC footer): 32 or 64 KB of Gen 1/2 SRAM, or the 128 KB Flash of a Gen 3 game.
+         * [language] forces the text language of international saves; by default it is guessed from the Pokemon
+         * (nicknames in Gen 1/2, the language byte of the trainer's own Pokemon in Gen 3; English if undecidable).
+         * @throws UnsupportedSaveException if the data isn't a supported Gen 1-3 save.
          */
         public fun load(bytes: ByteArray, language: Int? = null): SaveFile = SaveLoader.load(bytes, language)
     }

@@ -29,7 +29,8 @@ class RealSaveTest {
             assertTrue("$label hp", p.currentHp in 0..p.stats.hp)
             for (m in p.moves) assertTrue("$label ${m.name}", m.pp <= m.maxPp)
             assertTrue(label, p.moves[0].id != 0)
-            for (dv in listOf(p.dvs.attack, p.dvs.defense, p.dvs.speed, p.dvs.special)) assertTrue(label, dv in 0..15)
+            val dvs = p.dvs!!
+            for (dv in listOf(dvs.attack, dvs.defense, dvs.speed, dvs.special)) assertTrue(label, dv in 0..15)
         }
     }
 

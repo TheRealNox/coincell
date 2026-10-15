@@ -6,7 +6,8 @@ Usage: python -I generate_data.py <path-to-PKHeX.Core> <path-to-pkcore-module>
 
 Everything written by this script is a faithful conversion of PKHeX (GPL-3.0, commit 641c26b):
   * binary personal tables are copied byte for byte;
-  * text lists (species, moves, items) are normalised to UTF-8 + LF and cut to the Gen 1/2 range;
+  * text lists (species, moves, items, abilities, natures, locations) are normalised to UTF-8 + LF and cut to
+    the Gen 1-3 range;
   * numeric / character tables are parsed out of the C# sources and emitted as Kotlin.
 """
 import os
@@ -78,7 +79,7 @@ def main(core, module):
 
     # ---- binary personal tables -------------------------------------------------------------
     os.makedirs(res, exist_ok=True)
-    for name in ("rb", "y", "gs", "c"):
+    for name in ("rb", "y", "gs", "c", "rs", "e", "fr", "lg"):
         shutil.copyfile(os.path.join(core, "Resources", "byte", "personal", "personal_" + name),
                         os.path.join(res, "personal_%s.bin" % name))
 
@@ -92,10 +93,18 @@ def main(core, module):
         mv = read_text_lines(os.path.join(base, "other", lang, "text_Moves_%s.txt" % lang))
         i1 = read_text_lines(os.path.join(base, "items", "gen1", "text_ItemsG1_%s.txt" % lang))
         i2 = read_text_lines(os.path.join(base, "items", "gen2", "text_ItemsG2_%s.txt" % lang))
-        write(os.path.join(res, "species_%s.txt" % lang), "\n".join(pad(sp, 252)) + "\n")   # 0 = egg name, 1..251
-        write(os.path.join(res, "moves_%s.txt" % lang), "\n".join(pad(mv, 252)) + "\n")     # 0..251
+        i3 = read_text_lines(os.path.join(base, "items", "gen3", "text_ItemsG3_%s.txt" % lang))
+        ab = read_text_lines(os.path.join(base, "other", lang, "text_Abilities_%s.txt" % lang))
+        na = read_text_lines(os.path.join(base, "other", lang, "text_Natures_%s.txt" % lang))
+        l3 = read_text_lines(os.path.join(base, "locations", "gen3", "text_rsefrlg_00000_%s.txt" % lang))
+        write(os.path.join(res, "species_%s.txt" % lang), "\n".join(pad(sp, 387)) + "\n")   # 0 = egg name, 1..386
+        write(os.path.join(res, "moves_%s.txt" % lang), "\n".join(pad(mv, 355)) + "\n")     # 0..354
         write(os.path.join(res, "items_g1_%s.txt" % lang), "\n".join(pad(i1, 256)) + "\n")  # 0..255
         write(os.path.join(res, "items_g2_%s.txt" % lang), "\n".join(pad(i2, 256)) + "\n")  # 0..255
+        write(os.path.join(res, "items_g3_%s.txt" % lang), "\n".join(pad(i3, 377)) + "\n")  # 0..376
+        write(os.path.join(res, "abilities_%s.txt" % lang), "\n".join(pad(ab, 78)) + "\n")  # 0..77
+        write(os.path.join(res, "natures_%s.txt" % lang), "\n".join(pad(na, 25)) + "\n")    # 0..24
+        write(os.path.join(res, "locations_g3_%s.txt" % lang), "\n".join(pad(l3, 256)) + "\n")  # 0..255
 
     # ---- Experience.cs ------------------------------------------------------------------------
     exp = read("PKM/Util/Experience.cs")
@@ -136,9 +145,37 @@ def main(core, module):
     out = HEADER.format(src="PKHeX.Core/Moves/MoveInfo1.cs, Moves/MoveInfo2.cs") + "internal object MoveTables {\n"
     out += "    /** Base PP by move id, Generation 1 (%d entries). */\n    val ppGen1: IntArray = intArrayOf(\n%s\n    )\n\n" % (
         len(pp1), kt_ints(pp1, 20))
-    out += "    /** Base PP by move id, Generation 2 (%d entries). */\n    val ppGen2: IntArray = intArrayOf(\n%s\n    )\n}\n" % (
+    out += "    /** Base PP by move id, Generation 2 (%d entries). */\n    val ppGen2: IntArray = intArrayOf(\n%s\n    )\n\n" % (
         len(pp2), kt_ints(pp2, 20))
+    pp3 = int_list(array_body(read("Moves/MoveInfo3.cs"), "ReadOnlySpan<byte> PP"))
+    out += "    /** Base PP by move id, Generation 3 (%d entries). */\n    val ppGen3: IntArray = intArrayOf(\n%s\n    )\n}\n" % (
+        len(pp3), kt_ints(pp3, 20))
+    out = out.replace("Moves/MoveInfo1.cs, Moves/MoveInfo2.cs", "Moves/MoveInfo1.cs, Moves/MoveInfo2.cs, Moves/MoveInfo3.cs")
     write(os.path.join(kt, "MoveTables.kt"), out)
+
+    # ---- Generation 3: species ids, item lists, item ids of later games ----------------------
+    n2i3 = int_list(array_body(sc, "ReadOnlySpan<sbyte> Table3NationalToInternal"))
+    i2n3 = int_list(array_body(sc, "ReadOnlySpan<sbyte> Table3InternalToNational"))
+    i3to4 = int_list(array_body(ic, "ReadOnlySpan<ushort> Item3to4"))
+    rs = read("Items/ItemStorage3RS.cs")
+    g3 = {n: int_list(array_body(rs, "ReadOnlySpan<ushort> " + n)) for n in ("General", "Key", "Machine", "Berry", "Balls")}
+    key_e = int_list(array_body(read("Items/ItemStorage3E.cs"), "ReadOnlySpan<ushort> Key"))
+    key_frlg = int_list(array_body(read("Items/ItemStorage3FRLG.cs"), "ReadOnlySpan<ushort> Key"))
+    out = HEADER.format(src="PKHeX.Core/PKM/Util/Conversion/SpeciesConverter.cs, PKM/Util/Conversion/ItemConverter.cs, "
+                            "Items/ItemStorage3RS.cs, Items/ItemStorage3E.cs, Items/ItemStorage3FRLG.cs") + \
+        "internal object Gen3Tables {\n"
+    out += "    /** Delta national -> internal species id, from national id 252 on. */\n" \
+           "    val nationalToInternalDelta: IntArray = intArrayOf(\n" + kt_ints(n2i3, 10) + "\n    )\n\n"
+    out += "    /** Delta internal -> national species id, from internal id 277 on. */\n" \
+           "    val internalToNationalDelta: IntArray = intArrayOf(\n" + kt_ints(i2n3, 10) + "\n    )\n\n"
+    out += "    /** Generation 3 item id -> Generation 4+ item id (128 = none). */\n" \
+           "    val item3to4: IntArray = intArrayOf(\n" + kt_ints(i3to4, 10) + "\n    )\n\n"
+    names3 = {"General": "general", "Key": "keyRS", "Machine": "machine", "Berry": "berries", "Balls": "balls"}
+    for k, v in g3.items():
+        out += "    val %s: IntArray = intArrayOf(\n%s\n    )\n\n" % (names3[k], kt_ints(v))
+    out += "    val keyE: IntArray = intArrayOf(\n%s\n    )\n\n" % kt_ints(key_e)
+    out += "    val keyFRLG: IntArray = intArrayOf(\n%s\n    )\n}\n" % kt_ints(key_frlg)
+    write(os.path.join(kt, "Gen3Tables.kt"), out)
 
     # ---- Item storage -------------------------------------------------------------------------
     i1 = int_list(array_body(read("Items/ItemStorage1.cs"), "ReadOnlySpan<ushort> General"))
@@ -176,8 +213,17 @@ def main(core, module):
         assert len(chars) == 256, (name, len(chars))
         return chars
 
+    def parse_table3(src, name):
+        body = array_body(src, "ReadOnlySpan<char> " + name)
+        g3 = {"HGM": "⑭", "HGF": "⑮", "FGM": "♂", "FGF": "♀", "Terminator": "ÿ"}
+        toks = re.findall(r"'(?:\\.|[^'\\])'|Terminator|[A-Z]{3}", body)
+        chars = [("'" if t == "'\\''" else t[1:-1]) if t.startswith("'") else g3[t] for t in toks]
+        assert len(chars) == 256, (name, len(chars))
+        return chars
+
     s1 = read("PKM/Strings/StringConverter1.cs")
     s2c = read("PKM/Strings/StringConverter2.cs")
+    s3c = read("PKM/Strings/StringConverter3.cs")
     tables = [
         ("gen1English", parse_table(s1, "TableEN"), "StringConverter1.TableEN"),
         ("gen1Japanese", parse_table(s1, "TableJP"), "StringConverter1.TableJP"),
@@ -185,9 +231,11 @@ def main(core, module):
         ("gen2French", parse_table(s2c, "TableFRE"), "StringConverter2.TableFRE (also German)"),
         ("gen2Italian", parse_table(s2c, "TableITA"), "StringConverter2.TableITA (also Spanish)"),
         ("gen2Japanese", parse_table(s2c, "TableJP"), "StringConverter2.TableJP"),
+        ("gen3International", parse_table3(s3c, "G3_EN"), "StringConverter3.G3_EN (U+00FF = terminator)"),
+        ("gen3Japanese", parse_table3(s3c, "G3_JP"), "StringConverter3.G3_JP (U+00FF = terminator)"),
     ]
-    out = HEADER.format(src="PKHeX.Core/PKM/Strings/StringConverter1.cs, StringConverter2.cs") + \
-        "/** Gen 1/2 character tables: index = game byte, value = char (U+0000 = no character / terminator). */\n" \
+    out = HEADER.format(src="PKHeX.Core/PKM/Strings/StringConverter1.cs, StringConverter2.cs, StringConverter3.cs") + \
+        "/** Gen 1-3 character tables: index = game byte, value = char (Gen 1/2: U+0000 = no character / terminator). */\n" \
         "internal object CharTables {\n"
     for ident, chars, comment in tables:
         out += "    /** %s */\n    val %s: String =\n" % (comment, ident)

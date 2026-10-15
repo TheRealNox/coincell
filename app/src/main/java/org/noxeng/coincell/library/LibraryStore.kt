@@ -199,7 +199,7 @@ class LibraryStore(
     suspend fun readSave(entry: BackupEntry): ByteArray = withContext(io) { library.readSave(entry) }
 
     /**
-     * Whether [entry] of [game] opens in the Pokemon editor. Cheap (one parse of a 32 KiB save) and cached per
+     * Whether [entry] of [game] opens in the Pokemon editor. Cheap (one parse of a 32 to 128 KiB save) and cached per
      * backup, so screens can call it freely.
      */
     suspend fun probePokemon(game: GameInfo, entry: BackupEntry): PokemonSaveKind {

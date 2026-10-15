@@ -12,6 +12,7 @@ object SyntheticSaves {
         Game.RED_BLUE, Game.YELLOW -> if (region == Region.JAPANESE) 0x2ED5 to 0x302D else 0x2F2C to 0x30C0
         Game.GOLD_SILVER -> if (region == Region.JAPANESE) 0x2D10 to 0x283E else 0x288A to 0x2D6C
         Game.CRYSTAL -> if (region == Region.JAPANESE) 0x2D10 to 0x281A else 0x2865 to 0x2D10
+        else -> error("Generation 1/2 only")
     }
 
     /**

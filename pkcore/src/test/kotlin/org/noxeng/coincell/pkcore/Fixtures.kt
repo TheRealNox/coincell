@@ -5,7 +5,7 @@ import java.io.File
 
 /**
  * The user's personal saves live in `pkcore/src/test/fixtures-local/` (git-ignored). Tests that need them
- * call [blueOrSkip] / [crystalOrSkip], which skip the test through JUnit `Assume` when the file is absent.
+ * call [blueOrSkip] / [crystalOrSkip] / [sapphireOrSkip], which skip the test through JUnit `Assume` when the file is absent.
  */
 object Fixtures {
     private val dir: File = listOf(File("src/test/fixtures-local"), File("pkcore/src/test/fixtures-local"))
@@ -25,5 +25,12 @@ object Fixtures {
         val bytes = load("Pokemon - Version Cristal (France).sav")
         Assume.assumeTrue("fixtures-local/Pokemon - Version Cristal (France).sav not present", bytes != null)
         return bytes!!.copyOf(0x8000)
+    }
+
+    /** French Sapphire, 128 KiB of Flash; the file has FlashGBX's 16-byte RTC footer, which is stripped. */
+    fun sapphireOrSkip(): ByteArray {
+        val bytes = load("Pokemon - Version Saphir (France).sav")
+        Assume.assumeTrue("fixtures-local/Pokemon - Version Saphir (France).sav not present", bytes != null)
+        return bytes!!.copyOf(0x20000)
     }
 }

@@ -6,6 +6,7 @@ import org.noxeng.coincell.pkcore.Game
 import org.noxeng.coincell.pkcore.Region
 import org.noxeng.coincell.pkcore.SaveFile
 import org.noxeng.coincell.pkcore.UnsupportedSaveException
+import org.noxeng.coincell.pkcore.gba.Sav3
 
 /** Result of save detection. */
 internal data class SaveTypeInfo(val game: Game, val region: Region) {
@@ -21,8 +22,8 @@ internal object SaveDetector {
     fun detect(data: ByteArray): SaveTypeInfo {
         if (data.size != SIZE_G1_RAW && data.size != SIZE_G2_RAW_J) {
             throw UnsupportedSaveException(
-                "Unsupported save size: ${data.size} bytes (expected 32768, or 65536 for some Japanese Gen 2 saves). " +
-                    "Pass the raw SRAM without any RTC footer.",
+                "Unsupported save size: ${data.size} bytes (expected 32768, 65536 for some Japanese Gen 2 saves, " +
+                    "or 131072 for Gen 3). Pass the raw save memory without any RTC footer.",
             )
         }
         isG1(data)?.let { return it }
@@ -78,6 +79,7 @@ internal object SaveDetector {
 /** Creates the [SaveFile] matching the detected type. */
 internal object SaveLoader {
     fun load(bytes: ByteArray, language: Int?): SaveFile {
+        if (bytes.size == Sav3.SIZE_RAW) return Sav3.load(bytes, language)
         val info = SaveDetector.detect(bytes)
         if (info.region == Region.KOREAN) {
             throw UnsupportedSaveException("Korean Generation 2 saves are detected but not supported yet.")

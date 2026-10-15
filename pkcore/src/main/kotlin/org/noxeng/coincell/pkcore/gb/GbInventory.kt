@@ -25,6 +25,7 @@ internal class GbInventory(private val generation: Int, private val pouches: Lis
             PocketType.TM_HM -> ItemTables.gen2Machine.toList()
             PocketType.BALLS -> ItemTables.gen2Balls.toList()
             PocketType.PC_ITEMS -> pcItems()
+            PocketType.BERRIES -> emptyList() // Generation 3 only
         }
     }
 

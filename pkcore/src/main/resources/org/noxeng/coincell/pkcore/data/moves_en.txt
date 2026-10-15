@@ -250,3 +250,106 @@ Future Sight
 Rock Smash
 Whirlpool
 Beat Up
+Fake Out
+Uproar
+Stockpile
+Spit Up
+Swallow
+Heat Wave
+Hail
+Torment
+Flatter
+Will-O-Wisp
+Memento
+Facade
+Focus Punch
+Smelling Salts
+Follow Me
+Nature Power
+Charge
+Taunt
+Helping Hand
+Trick
+Role Play
+Wish
+Assist
+Ingrain
+Superpower
+Magic Coat
+Recycle
+Revenge
+Brick Break
+Yawn
+Knock Off
+Endeavor
+Eruption
+Skill Swap
+Imprison
+Refresh
+Grudge
+Snatch
+Secret Power
+Dive
+Arm Thrust
+Camouflage
+Tail Glow
+Luster Purge
+Mist Ball
+Feather Dance
+Teeter Dance
+Blaze Kick
+Mud Sport
+Ice Ball
+Needle Arm
+Slack Off
+Hyper Voice
+Poison Fang
+Crush Claw
+Blast Burn
+Hydro Cannon
+Meteor Mash
+Astonish
+Weather Ball
+Aromatherapy
+Fake Tears
+Air Cutter
+Overheat
+Odor Sleuth
+Rock Tomb
+Silver Wind
+Metal Sound
+Grass Whistle
+Tickle
+Cosmic Power
+Water Spout
+Signal Beam
+Shadow Punch
+Extrasensory
+Sky Uppercut
+Sand Tomb
+Sheer Cold
+Muddy Water
+Bullet Seed
+Aerial Ace
+Icicle Spear
+Iron Defense
+Block
+Howl
+Dragon Claw
+Frenzy Plant
+Bulk Up
+Bounce
+Mud Shot
+Poison Tail
+Covet
+Volt Tackle
+Magical Leaf
+Water Sport
+Calm Mind
+Leaf Blade
+Dragon Dance
+Rock Blast
+Shock Wave
+Water Pulse
+Doom Desire
+Psycho Boost

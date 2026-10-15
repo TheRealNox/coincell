@@ -17,7 +17,7 @@ import org.noxeng.coincell.pkcore.ItemStack
 import org.noxeng.coincell.pkcore.PocketType
 import org.noxeng.coincell.pkcore.SlotRef
 import org.noxeng.coincell.pkcore.Trainer
-import org.noxeng.coincell.pkcore.gb.GbPokemon
+import org.noxeng.coincell.pkcore.EditablePokemon
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -93,7 +93,7 @@ class EditorViewModel(
         }
         val opened = try {
             val bytes = store.readSave(entry)
-            withContext(work) { SaveEditor.open(bytes) }
+            withContext(work) { SaveEditor.open(bytes, summary.game) }
         } catch (e: Exception) {
             fail("This save could not be read as a Pokemon save (${e.message ?: e.javaClass.simpleName}).")
             return
@@ -138,7 +138,7 @@ class EditorViewModel(
     // ---- edits ------------------------------------------------------------------------------------------------------
     fun updateTrainer(trainer: Trainer): String? = attempt { it.updateTrainer(trainer) }
 
-    fun edit(slot: SlotRef, block: (GbPokemon) -> Unit): String? = attempt { it.edit(slot, block) }
+    fun edit(slot: SlotRef, block: (EditablePokemon) -> Unit): String? = attempt { it.edit(slot, block) }
 
     /** Adds a new Pokemon to the first free slot of [slot]'s container; [onAdded] gets the slot it went to. */
     fun addPokemon(slot: SlotRef, species: Int, onAdded: (SlotRef) -> Unit = {}): String? {

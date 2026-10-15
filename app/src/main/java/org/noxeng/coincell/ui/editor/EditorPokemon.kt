@@ -57,7 +57,7 @@ import org.noxeng.coincell.editor.TypeNames
 import org.noxeng.coincell.pkcore.Gender
 import org.noxeng.coincell.pkcore.PokemonSummary
 import org.noxeng.coincell.pkcore.SlotRef
-import org.noxeng.coincell.pkcore.gb.GbPokemon
+import org.noxeng.coincell.pkcore.EditablePokemon
 import org.noxeng.coincell.sprites.SpriteRules
 import org.noxeng.coincell.ui.CloseWhenGone
 import org.noxeng.coincell.ui.LocalShell
@@ -84,11 +84,11 @@ fun EditorPokemonScreen(vm: EditorViewModel, actions: EditorActions, slot: SlotR
         CloseWhenGone(true, onBack)
         return
     }
-    val tabs = remember(model) { if (model.generation == 2) PokemonTab.entries else PokemonTab.entries - PokemonTab.MET }
+    val tabs = remember(model) { if (model.generation >= 2) PokemonTab.entries else PokemonTab.entries - PokemonTab.MET }
     var tab by rememberSaveable { mutableStateOf(PokemonTab.SUMMARY.name) }
     val current = tabs.firstOrNull { it.name == tab } ?: PokemonTab.SUMMARY
 
-    fun apply(block: (GbPokemon) -> Unit) {
+    fun apply(block: (EditablePokemon) -> Unit) {
         vm.edit(slot, block)?.let(shell::message)
     }
 
@@ -103,7 +103,7 @@ fun EditorPokemonScreen(vm: EditorViewModel, actions: EditorActions, slot: SlotR
                 text = { Text("Heal (HP, status, PP)") },
                 onClick = { close(); vm.heal(slot)?.let(shell::message) },
             )
-            if (model.generation == 2) {
+            if (model.generation >= 2) {
                 DropdownMenuItem(
                     text = { Text("Make shiny") },
                     enabled = !p.isShiny,
@@ -125,8 +125,12 @@ fun EditorPokemonScreen(vm: EditorViewModel, actions: EditorActions, slot: SlotR
             when (current) {
                 PokemonTab.SUMMARY -> SummaryTab(p, model, slot, ::apply)
                 PokemonTab.MOVES -> MovesTab(p, model, ::apply)
-                PokemonTab.STATS -> StatsTab(p, model, ::apply, onMakeShiny = { vm.makeShiny(slot)?.let(shell::message) })
-                PokemonTab.MET -> MetTab(p, model, ::apply)
+                PokemonTab.STATS -> if (model.generation == 3) {
+                    StatsTab3(p, model, ::apply)
+                } else {
+                    StatsTab(p, model, ::apply, onMakeShiny = { vm.makeShiny(slot)?.let(shell::message) })
+                }
+                PokemonTab.MET -> if (model.generation == 3) MetTab3(p, model, ::apply) else MetTab(p, model, ::apply)
             }
         }
     }
@@ -159,12 +163,13 @@ private fun Header(p: PokemonSummary, model: SaveEditor, slot: SlotRef) {
 // ---- Summary --------------------------------------------------------------------------------------------------------
 
 @Composable
-private fun SummaryTab(p: PokemonSummary, model: SaveEditor, slot: SlotRef, apply: (((GbPokemon) -> Unit)) -> Unit) {
+private fun SummaryTab(p: PokemonSummary, model: SaveEditor, slot: SlotRef, apply: (((EditablePokemon) -> Unit)) -> Unit) {
     var pickSpecies by remember { mutableStateOf(false) }
     var pickItem by remember { mutableStateOf(false) }
     var editNickname by remember { mutableStateOf(false) }
     var editOt by remember { mutableStateOf(false) }
-    val gen2 = model.generation == 2
+    val gen = model.generation
+    val gen2 = gen >= 2 // held item, friendship, eggs, shininess: Generations 2 and 3
 
     ClickRow("Species", p.speciesName + model.englishStrings.speciesName(p.species).let { if (it != p.speciesName) " ($it)" else "" }) { pickSpecies = true }
     ClickRow("Nickname", p.nickname.ifBlank { "(none)" } + if (!p.isNicknamed) "  (species name)" else "") { editNickname = true }
@@ -178,6 +183,11 @@ private fun SummaryTab(p: PokemonSummary, model: SaveEditor, slot: SlotRef, appl
     FieldRow("Trainer ID", hint = "0 to 65535") {
         StepperField(p.trainerId, 0..65535, { v -> apply { PokemonEdits.setTrainerId(it, v) } }, description = "trainer ID", fieldWidth = 100.dp)
     }
+    p.gen3?.let { g ->
+        FieldRow("Secret ID", hint = "0 to 65535; with the trainer ID it decides shininess") {
+            StepperField(g.secretId, 0..65535, { v -> apply { PokemonEdits.setSecretId(it, v) } }, description = "secret ID", fieldWidth = 100.dp)
+        }
+    }
     if (gen2) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable { pickItem = true },
@@ -187,21 +197,32 @@ private fun SummaryTab(p: PokemonSummary, model: SaveEditor, slot: SlotRef, appl
             Column(Modifier.weight(1f)) {
                 Text("Held item", style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    if (p.heldItem == 0) "None" else p.heldItemName + model.englishStrings.itemName(2, p.heldItem).let { if (it != p.heldItemName) " ($it)" else "" },
+                    if (p.heldItem == 0) "None" else p.heldItemName + model.englishStrings.itemName(gen, p.heldItem).let { if (it != p.heldItemName) " ($it)" else "" },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (p.heldItem != 0) ItemIcon(2, p.heldItem)
+            if (p.heldItem != 0) ItemIcon(gen, p.heldItem)
             Icon(Icons.Filled.Edit, contentDescription = "Change the held item")
         }
         FieldRow("Friendship", hint = if (p.isEgg) "For an egg: steps left to hatch" else "0 to 255") {
             StepperField(p.friendship ?: 0, 0..255, { v -> apply { PokemonEdits.setFriendship(it, v) } }, description = "friendship", fieldWidth = 72.dp)
         }
-        FieldRow("Egg", hint = "Shows the egg sprite; the species is kept") {
+        FieldRow(
+            "Egg",
+            hint = if (gen == 3) {
+                "An egg is stored with the Japanese egg name, as the games do; hatching gives the species name back"
+            } else {
+                "Shows the egg sprite; the species is kept"
+            },
+        ) {
             Switch(checked = p.isEgg, onCheckedChange = { v -> apply { PokemonEdits.setEgg(it, v) } })
         }
-        if (p.isShiny) NeutralChip("Shiny (derived from the DVs)", Icons.Filled.Star)
+        if (gen == 3) {
+            Gen3SummaryRows(p, model, apply)
+        } else if (p.isShiny) {
+            NeutralChip("Shiny (derived from the DVs)", Icons.Filled.Star)
+        }
     } else {
         Text("Generation 1 has no held items, friendship or shininess.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -225,7 +246,7 @@ private fun SummaryTab(p: PokemonSummary, model: SaveEditor, slot: SlotRef, appl
         )
     }
     if (pickItem) {
-        val entries = remember(model) { Pickers.heldItems(model.language) }
+        val entries = remember(model) { Pickers.heldItems(gen, model.language) }
         PickerSheet(
             title = "Held item",
             entries = entries,
@@ -234,7 +255,7 @@ private fun SummaryTab(p: PokemonSummary, model: SaveEditor, slot: SlotRef, appl
             noneLabel = "No item",
             onNone = { pickItem = false; apply { PokemonEdits.setHeldItem(it, 0) } },
             onPick = { e -> pickItem = false; apply { PokemonEdits.setHeldItem(it, e.id) } },
-            leading = { e -> ItemIcon(2, e.id) },
+            leading = { e -> ItemIcon(gen, e.id) },
         )
     }
     if (editNickname) {
@@ -267,7 +288,7 @@ private fun PickerSprite(e: PickerEntry) {
 }
 
 @Composable
-private fun ClickRow(label: String, value: String, onClick: () -> Unit) {
+internal fun ClickRow(label: String, value: String, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
@@ -284,7 +305,7 @@ private fun ClickRow(label: String, value: String, onClick: () -> Unit) {
 // ---- Moves ----------------------------------------------------------------------------------------------------------
 
 @Composable
-private fun MovesTab(p: PokemonSummary, model: SaveEditor, apply: (((GbPokemon) -> Unit)) -> Unit) {
+private fun MovesTab(p: PokemonSummary, model: SaveEditor, apply: (((EditablePokemon) -> Unit)) -> Unit) {
     var pickSlot by remember { mutableStateOf<Int?>(null) }
     val firstFree = p.moves.indexOfFirst { it.id == 0 }.let { if (it < 0) 4 else it }
     p.moves.forEachIndexed { i, m ->
@@ -342,9 +363,11 @@ private fun MovesTab(p: PokemonSummary, model: SaveEditor, apply: (((GbPokemon) 
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun StatsTab(p: PokemonSummary, model: SaveEditor, apply: (((GbPokemon) -> Unit)) -> Unit, onMakeShiny: () -> Unit) {
+private fun StatsTab(p: PokemonSummary, model: SaveEditor, apply: (((EditablePokemon) -> Unit)) -> Unit, onMakeShiny: () -> Unit) {
     val lang = model.language
     val gen2 = model.generation == 2
+    val dvs = p.dvs ?: return
+    val statExp = p.statExp ?: return
     Text(
         "DVs (0-15) and stat experience (0-65535) are the Generation 1/2 equivalents of IVs and EVs. The totals follow your edits.",
         style = MaterialTheme.typography.bodySmall,
@@ -356,13 +379,13 @@ private fun StatsTab(p: PokemonSummary, model: SaveEditor, apply: (((GbPokemon) 
         Text("Stat exp", Modifier.width(100.dp), style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
         Text("Total", Modifier.weight(0.7f), style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.End)
     }
-    StatRow(StatLabels.hp(lang), p.dvs.hp, null, p.statExp.hp, { v -> apply { PokemonEdits.setStatExp(it, StatExpStat.HP, v) } }, p.stats.hp.toString())
-    StatRow(StatLabels.attack(lang), p.dvs.attack, { v -> apply { PokemonEdits.setDv(it, DvStat.ATTACK, v) } }, p.statExp.attack, { v -> apply { PokemonEdits.setStatExp(it, StatExpStat.ATTACK, v) } }, p.stats.attack.toString())
-    StatRow(StatLabels.defense(lang), p.dvs.defense, { v -> apply { PokemonEdits.setDv(it, DvStat.DEFENSE, v) } }, p.statExp.defense, { v -> apply { PokemonEdits.setStatExp(it, StatExpStat.DEFENSE, v) } }, p.stats.defense.toString())
-    StatRow(StatLabels.speed(lang), p.dvs.speed, { v -> apply { PokemonEdits.setDv(it, DvStat.SPEED, v) } }, p.statExp.speed, { v -> apply { PokemonEdits.setStatExp(it, StatExpStat.SPEED, v) } }, p.stats.speed.toString())
+    StatRow(StatLabels.hp(lang), dvs.hp, null, statExp.hp, { v -> apply { PokemonEdits.setStatExp(it, StatExpStat.HP, v) } }, p.stats.hp.toString())
+    StatRow(StatLabels.attack(lang), dvs.attack, { v -> apply { PokemonEdits.setDv(it, DvStat.ATTACK, v) } }, statExp.attack, { v -> apply { PokemonEdits.setStatExp(it, StatExpStat.ATTACK, v) } }, p.stats.attack.toString())
+    StatRow(StatLabels.defense(lang), dvs.defense, { v -> apply { PokemonEdits.setDv(it, DvStat.DEFENSE, v) } }, statExp.defense, { v -> apply { PokemonEdits.setStatExp(it, StatExpStat.DEFENSE, v) } }, p.stats.defense.toString())
+    StatRow(StatLabels.speed(lang), dvs.speed, { v -> apply { PokemonEdits.setDv(it, DvStat.SPEED, v) } }, statExp.speed, { v -> apply { PokemonEdits.setStatExp(it, StatExpStat.SPEED, v) } }, p.stats.speed.toString())
     StatRow(
-        StatLabels.special(lang), p.dvs.special, { v -> apply { PokemonEdits.setDv(it, DvStat.SPECIAL, v) } },
-        p.statExp.special, { v -> apply { PokemonEdits.setStatExp(it, StatExpStat.SPECIAL, v) } },
+        StatLabels.special(lang), dvs.special, { v -> apply { PokemonEdits.setDv(it, DvStat.SPECIAL, v) } },
+        statExp.special, { v -> apply { PokemonEdits.setStatExp(it, StatExpStat.SPECIAL, v) } },
         if (gen2) "${p.stats.specialAttack}/${p.stats.specialDefense}" else p.stats.specialAttack.toString(),
     )
     if (gen2) {
@@ -405,7 +428,7 @@ private fun StatsTab(p: PokemonSummary, model: SaveEditor, apply: (((GbPokemon) 
         style = MaterialTheme.typography.bodyMedium,
     )
     if (p.species == SpriteRules.UNOWN) {
-        val letter = ('A' + SpriteRules.unownForm(p.dvs))
+        val letter = ('A' + p.form)
         Text("Unown letter: $letter (from the DVs; changing them changes the letter)", style = MaterialTheme.typography.bodyMedium)
     }
 }
@@ -432,7 +455,7 @@ private fun StatRow(
 }
 
 @Composable
-private fun CompactNumberField(value: Int, range: IntRange, onValue: (Int) -> Unit, modifier: Modifier, description: String) {
+internal fun CompactNumberField(value: Int, range: IntRange, onValue: (Int) -> Unit, modifier: Modifier, description: String) {
     var text by remember(value) { mutableStateOf(value.toString()) }
     val n = text.toIntOrNull()
     OutlinedTextField(
@@ -455,7 +478,7 @@ private fun CompactNumberField(value: Int, range: IntRange, onValue: (Int) -> Un
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MetTab(p: PokemonSummary, model: SaveEditor, apply: (((GbPokemon) -> Unit)) -> Unit) {
+private fun MetTab(p: PokemonSummary, model: SaveEditor, apply: (((EditablePokemon) -> Unit)) -> Unit) {
     val c = p.caughtData
     if (c == null) {
         Text("This Pokemon has no caught data.", style = MaterialTheme.typography.bodyMedium)

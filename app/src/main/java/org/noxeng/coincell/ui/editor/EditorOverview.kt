@@ -203,11 +203,12 @@ private fun TrainerCard(t: Trainer, model: SaveEditor, onClick: () -> Unit) {
                 Icon(Icons.Filled.Edit, contentDescription = "Edit trainer")
             }
             KeyValueRow("Trainer ID", "%05d".format(t.id), mono = true)
+            t.secretId?.let { KeyValueRow("Secret ID", "%05d".format(it), mono = true) }
             KeyValueRow("Money", "%,d".format(t.money))
-            if (model.generation == 2) KeyValueRow("Coins", "%,d".format(t.coins))
-            KeyValueRow("Badges", "${t.badgeCount} / ${Badges.list(model.generation, model.language).size}")
+            if (model.generation >= 2) KeyValueRow("Coins", "%,d".format(t.coins))
+            KeyValueRow("Badges", "${t.badgeCount} / ${Badges.list(model.game, model.language).size}")
             KeyValueRow("Play time", TrainerLimits.formatTime(t.playTime), mono = true)
-            KeyValueRow("Rival", t.rivalName.ifEmpty { "-" })
+            t.rivalName?.let { KeyValueRow("Rival", it.ifEmpty { "-" }) }
             t.gender?.let { KeyValueRow("Gender", if (it == TrainerGender.BOY) "Boy" else "Girl") }
         }
     }
@@ -246,8 +247,9 @@ fun EditorTrainerScreen(vm: EditorViewModel, actions: EditorActions, onBack: () 
     val nameMax = TrainerLimits.nameLength(model.isJapanese)
 
     var name by remember { mutableStateOf(t.name) }
-    var rival by remember { mutableStateOf(t.rivalName) }
+    var rival by remember { mutableStateOf(t.rivalName.orEmpty()) }
     var id by remember { mutableIntStateOf(t.id) }
+    var secretId by remember { mutableIntStateOf(t.secretId ?: 0) }
     var money by remember { mutableIntStateOf(t.money) }
     var coins by remember { mutableIntStateOf(t.coins) }
     var badges by remember { mutableIntStateOf(t.badges) }
@@ -258,9 +260,17 @@ fun EditorTrainerScreen(vm: EditorViewModel, actions: EditorActions, onBack: () 
 
     val nameError = TextCheck.check(name.trim(), nameMax, gen, model.language, model.isJapanese, "name")
         ?: if (name.isBlank()) "The name can't be empty." else null
-    val rivalError = TextCheck.check(rival.trim(), nameMax, gen, model.language, model.isJapanese, "rival name")
-        ?: if (rival.isBlank()) "The rival name can't be empty." else null
-    val edited = Trainer(name.trim(), id, money, badges, PlayTime(hours, minutes, seconds), rival.trim(), gender, if (gen == 2) coins else t.coins)
+    val hasRival = t.rivalName != null
+    val rivalError = if (!hasRival) {
+        null
+    } else {
+        TextCheck.check(rival.trim(), nameMax, gen, model.language, model.isJapanese, "rival name")
+            ?: if (rival.isBlank()) "The rival name can't be empty." else null
+    }
+    val edited = Trainer(
+        name.trim(), id, money, badges, PlayTime(hours, minutes, seconds), if (hasRival) rival.trim() else null, gender,
+        if (gen >= 2) coins else t.coins, if (t.secretId != null) secretId else null,
+    )
     val changed = edited != t
     val allowed = remember(model) { TextCheck.allowedCharacters(gen, model.language, model.isJapanese) }
 
@@ -278,15 +288,17 @@ fun EditorTrainerScreen(vm: EditorViewModel, actions: EditorActions, onBack: () 
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            OutlinedTextField(
-                value = rival,
-                onValueChange = { rival = it.take(nameMax + 3) },
-                label = { Text("Rival name") },
-                isError = rivalError != null,
-                supportingText = { Text(rivalError ?: "Up to $nameMax characters.") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            if (hasRival) {
+                OutlinedTextField(
+                    value = rival,
+                    onValueChange = { rival = it.take(nameMax + 3) },
+                    label = { Text("Rival name") },
+                    isError = rivalError != null,
+                    supportingText = { Text(rivalError ?: "Up to $nameMax characters.") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             if (allowed.isNotEmpty()) {
                 Text(
                     "Characters this save can store: $allowed",
@@ -297,10 +309,15 @@ fun EditorTrainerScreen(vm: EditorViewModel, actions: EditorActions, onBack: () 
             FieldRow("Trainer ID", hint = "0 to 65535") {
                 StepperField(id, 0..65535, { id = it }, description = "trainer ID", fieldWidth = 100.dp)
             }
+            if (t.secretId != null) {
+                FieldRow("Secret ID", hint = "0 to 65535. Pokemon keep their own copy of the IDs, so yours stay as they are.") {
+                    StepperField(secretId, 0..65535, { secretId = it }, description = "secret ID", fieldWidth = 100.dp)
+                }
+            }
             FieldRow("Money", hint = "0 to ${"%,d".format(TrainerLimits.MAX_MONEY)}") {
                 StepperField(money, 0..TrainerLimits.MAX_MONEY, { money = it }, description = "money", step = 1000, fieldWidth = 120.dp)
             }
-            if (gen == 2) {
+            if (gen >= 2) {
                 FieldRow("Game Corner coins", hint = "0 to ${"%,d".format(TrainerLimits.MAX_COINS)}") {
                     StepperField(coins, 0..TrainerLimits.MAX_COINS, { coins = it }, description = "coins", step = 100, fieldWidth = 100.dp)
                 }
@@ -323,7 +340,7 @@ fun EditorTrainerScreen(vm: EditorViewModel, actions: EditorActions, onBack: () 
                 }
             }
             SectionHeader("Badges (${Integer.bitCount(badges)})")
-            val list = Badges.list(gen, model.language)
+            val list = Badges.list(model.game, model.language)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 list.forEach { b ->
                     FilterChip(
@@ -357,5 +374,5 @@ fun EditorTrainerScreen(vm: EditorViewModel, actions: EditorActions, onBack: () 
     }
 }
 
-/** Gen 1/2 party size. */
+/** Party size (all generations). */
 private const val PARTY_SLOTS = 6

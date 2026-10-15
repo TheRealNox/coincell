@@ -101,7 +101,7 @@ class SpriteAndPickerTest {
         assertEquals(201, key.species)
         assertTrue(key.shiny)
         assertFalse(key.egg)
-        assertEquals(SpriteRules.unownForm(summary.dvs), key.form)
+        assertEquals(SpriteRules.unownForm(summary.dvs!!), key.form)
         pk.isEgg = true
         assertTrue(SpriteRules.keyOf(pk.summary()).egg)
     }

@@ -250,3 +250,106 @@ Premonición
 Golpe Roca
 Torbellino
 Paliza
+Sorpresa
+Alboroto
+Reserva
+Escupir
+Tragar
+Onda Ígnea
+Granizo
+Tormento
+Camelo
+Fuego Fatuo
+Legado
+Imagen
+Puño Certero
+Estímulo
+Señuelo
+Adaptación
+Carga
+Mofa
+Refuerzo
+Truco
+Imitación
+Deseo
+Ayuda
+Arraigo
+Fuerza Bruta
+Capa Mágica
+Reciclaje
+Desquite
+Demolición
+Bostezo
+Desarme
+Esfuerzo
+Estallido
+Intercambio
+Sellar
+Alivio
+Rabia
+Robo
+Daño Secreto
+Buceo
+Empujón
+Camuflaje
+Luminicola
+Resplandor
+Bola Neblina
+Danza Pluma
+Danza Caos
+Patada Ígnea
+Chapoteo Lodo
+Bola Hielo
+Brazo Pincho
+Relajo
+Vozarrón
+Colmillo Veneno
+Garra Brutal
+Anillo Ígneo
+Hidrocañón
+Puño Meteoro
+Impresionar
+Meteorobola
+Aromaterapia
+Llanto Falso
+Aire Afilado
+Sofoco
+Rastreo
+Tumba Rocas
+Viento Plata
+Eco Metálico
+Silbato
+Cosquillas
+Masa Cósmica
+Salpicar
+Rayo Señal
+Puño Sombra
+Paranormal
+Gancho Alto
+Bucle Arena
+Frío Polar
+Agua Lodosa
+Semilladora
+Golpe Aéreo
+Carámbano
+Defensa Férrea
+Bloqueo
+Aullido
+Garra Dragón
+Planta Feroz
+Corpulencia
+Bote
+Disparo Lodo
+Cola Veneno
+Antojo
+Placaje Eléc
+Hoja Mágica
+Hidrochorro
+Paz Mental
+Hoja Aguda
+Danza Dragón
+Pedrada
+Onda Voltio
+Hidropulso
+Deseo Oculto
+Psicoataque

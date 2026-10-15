@@ -172,7 +172,8 @@ fun EditorBoxesScreen(
             Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
                 Row(Modifier.padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "Moving $movingName: tap a slot. A Pokemon there swaps places; an empty slot sends it to the end.",
+                        "Moving $movingName: tap a slot. A Pokemon there swaps places; " +
+                            if (model.compactBoxes) "an empty slot sends it to the end." else "an empty box slot takes it there (the party fills from the start).",
                         Modifier.weight(1f).padding(vertical = 8.dp),
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -203,21 +204,21 @@ fun EditorBoxesScreen(
                     onChange = { box = it },
                 )
             }
-            val slots = boxSummary?.pokemon.orEmpty()
-            val emptyCount = (model.boxCapacity - slots.size).coerceAtLeast(0)
+            // Every slot in order: Gen 1/2 boxes are packed (the empty ones are the tail), Gen 3 boxes may have gaps.
+            val slots = boxSummary?.slots ?: List(model.boxCapacity) { null }
             itemsIndexed(slots, key = { i, _ -> "b$box-$i" }) { i, p ->
                 val ref = SlotRef.Box(box, i)
-                PokemonTile(
-                    p,
-                    selected = moving == ref,
-                    onClick = { tap(ref, true) },
-                    onLongClick = { actionsFor = ref },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            itemsIndexed(List(emptyCount) { it }, key = { _, k -> "e$box-$k" }) { k, _ ->
-                val ref = SlotRef.Box(box, slots.size + k)
-                EmptyTile({ tap(ref, false) }, Modifier.fillMaxWidth(), forMove = moving != null)
+                if (p != null) {
+                    PokemonTile(
+                        p,
+                        selected = moving == ref,
+                        onClick = { tap(ref, true) },
+                        onLongClick = { actionsFor = ref },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    EmptyTile({ tap(ref, false) }, Modifier.fillMaxWidth(), forMove = moving != null)
+                }
             }
         }
     }
@@ -241,7 +242,13 @@ fun EditorBoxesScreen(
         AlertDialog(
             onDismissRequest = { deleteFor = null },
             title = { Text("Remove ${p?.let { if (it.isEgg) "this egg" else it.speciesName } ?: "this Pokemon"}?") },
-            text = { Text("The Pokemon is deleted from the working copy; the slots after it move up. Nothing is lost for good until you save, and \"Revert all\" brings it back.") },
+            text = {
+                val shift = slot is SlotRef.Party || model.compactBoxes
+                Text(
+                    "The Pokemon is deleted from the working copy" + (if (shift) "; the slots after it move up." else "; its slot stays empty.") +
+                        " Nothing is lost for good until you save, and \"Revert all\" brings it back.",
+                )
+            },
             confirmButton = {
                 TextButton(onClick = { deleteFor = null; vm.removePokemon(slot)?.let(shell::message) }) {
                     Text("Remove", color = MaterialTheme.colorScheme.error)

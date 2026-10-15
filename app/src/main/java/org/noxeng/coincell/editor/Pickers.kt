@@ -1,6 +1,7 @@
 package org.noxeng.coincell.editor
 
 import org.noxeng.coincell.pkcore.data.GameStrings
+import org.noxeng.coincell.pkcore.data.ItemInfo
 import org.noxeng.coincell.pkcore.data.MoveInfo
 import org.noxeng.coincell.pkcore.text.LanguageId
 import java.text.Normalizer
@@ -55,14 +56,40 @@ object Pickers {
     fun items(generation: Int, ids: Collection<Int>, language: Int): List<PickerEntry> {
         val local = GameStrings.forLanguage(language)
         val en = GameStrings.forLanguage(LanguageId.ENGLISH)
-        return ids.filter { it in 1..255 }
+        val maxId = if (generation == 3) MAX_ITEM_3 else 255
+        return ids.filter { it in 1..maxId }
             .filter { isRealItemName(en.itemName(generation, it)) }
             .map { entry(it, local.itemName(generation, it), en.itemName(generation, it)) }
             .sortedWith(compareBy({ normalize(it.primary) }, { it.id }))
     }
 
-    /** Every item a Generation 2 Pokemon can hold. */
-    fun heldItems(language: Int): List<PickerEntry> = items(2, (1..255).toList(), language)
+    /** Every item a Pokemon of [generation] (2 or 3) can hold. */
+    fun heldItems(generation: Int, language: Int): List<PickerEntry> =
+        if (generation == 3) items(3, ItemInfo.heldItems3, language) else items(2, (1..255).toList(), language)
+
+    /** Generation 3 met locations with a name, in id order (0 is Littleroot Town, so it is listed). */
+    fun locations3(language: Int): List<PickerEntry> {
+        val local = GameStrings.forLanguage(language)
+        val en = GameStrings.forLanguage(LanguageId.ENGLISH)
+        return (0..255).filter { en.locationsGen3.getOrElse(it) { "" }.isNotBlank() }
+            .map { entry(it, local.locationName3(it), en.locationName3(it)) }
+    }
+
+    /** The 25 natures, 0 = Hardy ... 24 = Quirky. */
+    fun natures(language: Int): List<PickerEntry> {
+        val local = GameStrings.forLanguage(language)
+        val en = GameStrings.forLanguage(LanguageId.ENGLISH)
+        return (0..24).map { entry(it, local.natureName(it), en.natureName(it)) }
+    }
+
+    /** The 12 Generation 3 balls (ball ids are the item ids 1..12). */
+    fun balls(language: Int): List<PickerEntry> {
+        val local = GameStrings.forLanguage(language)
+        val en = GameStrings.forLanguage(LanguageId.ENGLISH)
+        return (1..PokemonEdits.BALL_COUNT).map { entry(it, local.itemName(3, it), en.itemName(3, it)) }
+    }
+
+    private const val MAX_ITEM_3 = 376
 
     /** Generation 2 met locations (unused ids left out), in game order. Location 0 ("none") is not listed. */
     fun locations(language: Int): List<PickerEntry> {

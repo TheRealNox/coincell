@@ -69,7 +69,7 @@ abstract class PreparePokemonSprites : DefaultTask() {
         }
         val index = mapOf(
             "version" to 1,
-            "itemMaps" to mapOf("gen1" to maps["gen1BagByName"], "gen2" to maps["gen2"]),
+            "itemMaps" to mapOf("gen1" to maps["gen1BagByName"], "gen2" to maps["gen2"], "gen3" to maps["gen3"]),
             "entries" to slim,
         )
         File(out, "sprites/index.json").writeText(JsonOutput.toJson(index), Charsets.UTF_8)

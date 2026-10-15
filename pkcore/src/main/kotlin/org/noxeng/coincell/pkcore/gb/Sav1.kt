@@ -190,7 +190,7 @@ internal class Sav1(bytes: ByteArray, info: SaveTypeInfo, requestedLanguage: Int
         if (trainer.playTime != old.playTime) writePlayTime(trainer.playTime)
         if (trainer.rivalName != old.rivalName) {
             StringConverter1.setString(
-                data, off.rival, trainerNameLength, trainer.rivalName, trainerNameLength, japanese, StringOption.CLEAR_50,
+                data, off.rival, trainerNameLength, trainer.rivalName.orEmpty(), trainerNameLength, japanese, StringOption.CLEAR_50,
             )
         }
         if (trainer.coins != old.coins) Bcd.writeBigEndian(data, off.coin, 2, trainer.coins.coerceIn(0, MAX_COINS).toLong())

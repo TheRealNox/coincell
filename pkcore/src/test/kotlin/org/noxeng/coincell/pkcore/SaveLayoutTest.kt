@@ -22,6 +22,7 @@ class SaveLayoutTest {
                 Game.RED_BLUE, Game.YELLOW -> if (jp) 0x2ED5 else 0x2F2C
                 Game.GOLD_SILVER -> if (jp) 0x283E else 0x288A
                 Game.CRYSTAL -> if (jp) 0x281A else 0x2865
+                else -> error("Generation 1/2 only")
             }
         val stringLength get() = if (jp) 6 else 11
         val partyBody get() = if (gen == 1) 44 else 48

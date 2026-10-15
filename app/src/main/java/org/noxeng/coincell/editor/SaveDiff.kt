@@ -27,6 +27,7 @@ object SaveDiff {
         val out = ArrayList<String>()
         if (o.name != n.name) out += "name ${o.name}→${n.name}"
         if (o.id != n.id) out += "trainer ID ${o.id}→${n.id}"
+        if (o.secretId != n.secretId) out += "secret ID ${o.secretId}→${n.secretId}"
         if (o.money != n.money) out += "money ${o.money}→${n.money}"
         if (o.coins != n.coins) out += "coins ${o.coins}→${n.coins}"
         if (o.badges != n.badges) out += "badges ${o.badgeCount}→${n.badgeCount}"
@@ -57,7 +58,8 @@ object SaveDiff {
     }
 
     private fun PokemonSummary.withoutPartyData(): PokemonSummary =
-        copy(currentHp = 0, status = 0, storedStats = StatBlock(0, 0, 0, 0, 0, 0))
+        // Gen 3 boxes don't keep the level byte either (it is part of the party-only data there).
+        copy(currentHp = 0, status = 0, storedStats = StatBlock(0, 0, 0, 0, 0, 0), storedLevel = if (generation == 3) 0 else storedLevel)
 
     private fun container(slot: SlotRef): Int = when (slot) {
         is SlotRef.Party -> -1
@@ -160,6 +162,22 @@ object SaveDiff {
         }
         if (o.dvs != n.dvs) parts += "DVs"
         if (o.statExp != n.statExp) parts += "stat EXP"
+        val g0 = o.gen3
+        val g1 = n.gen3
+        if (g0 != null && g1 != null) {
+            if (g0.ivs != g1.ivs) parts += "IVs"
+            if (g0.evs != g1.evs) parts += "EVs"
+            if (g0.nature != g1.nature) parts += "nature ${g0.natureName}→${g1.natureName}"
+            if (g0.abilitySlot != g1.abilitySlot) parts += "ability ${g0.abilityName}→${g1.abilityName}"
+            if (o.isShiny != n.isShiny) parts += if (n.isShiny) "made shiny" else "no longer shiny"
+            if (o.gender != n.gender) parts += "gender"
+            if (o.form != n.form) parts += "letter"
+            if (g0.ball != g1.ball) parts += "ball"
+            if (g0.metLocation != g1.metLocation || g0.metLevel != g1.metLevel || g0.originGame != g1.originGame || g0.otGender != g1.otGender) {
+                parts += "met data"
+            }
+            if (g0.secretId != g1.secretId) parts += "SID"
+        }
         if (o.heldItem != n.heldItem) parts += "item ${o.heldItemName.ifEmpty { "none" }}→${n.heldItemName.ifEmpty { "none" }}"
         if (o.friendship != n.friendship) parts += "friendship ${o.friendship}→${n.friendship}"
         if (o.otName != n.otName) parts += "OT"
@@ -201,6 +219,7 @@ object SaveDiff {
         PocketType.KEY_ITEMS -> "Key items"
         PocketType.TM_HM -> "TM/HM"
         PocketType.BALLS -> "Balls"
+        PocketType.BERRIES -> "Berries"
         PocketType.PC_ITEMS -> "PC items"
     }
 
