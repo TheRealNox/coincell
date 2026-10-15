@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- The Compose theme (GbfTheme) draws everything; this only sets the window background before it does. -->
-    <style name="Theme.GBFlash" parent="@android:style/Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Coincell" parent="@android:style/Theme.Material.Light.NoActionBar" />
 </resources>

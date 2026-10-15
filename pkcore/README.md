@@ -21,7 +21,7 @@ val out = save.export()                       // checksums fixed; unchanged save
 
 | Package | Content |
 |---|---|
-| `com.therealnox.gbflash.pkcore` | Public API: `SaveFile`, `Trainer`, `Pokemon`/`PokemonSummary`, `SlotRef`, `Inventory`, exceptions |
+| `org.noxeng.coincell.pkcore` | Public API: `SaveFile`, `Trainer`, `Pokemon`/`PokemonSummary`, `SlotRef`, `Inventory`, exceptions |
 | `...pkcore.gb` | The Gen 1/2 engine: `Sav1`, `Sav2`, `Pk1`, `Pk2`, `PokeListFormat` (list packing), `GbInventory`, `SaveDetector` |
 | `...pkcore.text` | `StringConverter1/2` (character tables, terminators, ligatures) |
 | `...pkcore.data` | Personal tables, species/move/item names, experience, PP, species order (resources + generated tables) |

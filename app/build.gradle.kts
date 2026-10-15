@@ -86,13 +86,13 @@ val preparePokemonSprites = if (hasPkAssets) {
 }
 
 android {
-    namespace = "com.therealnox.gbflash"
+    namespace = "org.noxeng.coincell"
     compileSdk {
         version = release(37) { minorApiLevel = 2 }
     }
 
     defaultConfig {
-        applicationId = "com.therealnox.gbflash"
+        applicationId = "org.noxeng.coincell"
         minSdk = 26
         targetSdk = 37
         versionCode = 1

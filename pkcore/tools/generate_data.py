@@ -58,7 +58,7 @@ HEADER = """\
 // Ported from PKHeX (https://github.com/kwsch/PKHeX, commit 641c26b), GPL-3.0.
 @file:Suppress("MagicNumber")
 
-package com.therealnox.gbflash.pkcore.data
+package org.noxeng.coincell.pkcore.data
 
 """
 
@@ -70,8 +70,8 @@ def write(path, text):
 
 
 def main(core, module):
-    res = os.path.join(module, "src", "main", "resources", "com", "therealnox", "gbflash", "pkcore", "data")
-    kt = os.path.join(module, "src", "main", "kotlin", "com", "therealnox", "gbflash", "pkcore", "data")
+    res = os.path.join(module, "src", "main", "resources", "org", "noxeng", "coincell", "pkcore", "data")
+    kt = os.path.join(module, "src", "main", "kotlin", "org", "noxeng", "coincell", "pkcore", "data")
 
     def read(rel):
         return open(os.path.join(core, rel), encoding="utf-8").read()

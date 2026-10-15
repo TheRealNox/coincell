@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher icon: a coin cell battery (the CR2025 that keeps cartridge saves alive), seen face on,
+     with a pixel heart for the save it keeps alive. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:translateY="3">
+        <!-- rim -->
+        <path android:fillColor="#A9AEC2" android:pathData="M26,51a28,28 0,1 0,56 0a28,28 0,1 0,-56 0z" />
+        <!-- face -->
+        <path android:fillColor="#C9CDDA" android:pathData="M28.5,51a25.5,25.5 0,1 0,51 0a25.5,25.5 0,1 0,-51 0z" />
+        <!-- raised inner face -->
+        <path android:fillColor="#E7E9F1" android:pathData="M32,51a22,22 0,1 0,44 0a22,22 0,1 0,-44 0z" />
+        <!-- highlight -->
+        <path
+            android:pathData="M32.4,38.5A25,25 0,0 1,45.4 27.5"
+            android:strokeWidth="3"
+            android:strokeColor="#FFFFFF"
+            android:strokeLineCap="round" />
+        <!-- plus, engraved near the rim -->
+        <path android:fillColor="#2A2D78" android:pathData="M49.5,35.5h3v-3h3v3h3v3h-3v3h-3v-3h-3z" />
+        <!-- pixel heart and its highlight pixel -->
+        <path android:fillColor="#E5484D" android:pathData="M45.25,45.5h7v3.5h-7z M55.75,45.5h7v3.5h-7z M41.75,49h24.5v3.5h-24.5z M41.75,52.5h24.5v3.5h-24.5z M45.25,56h17.5v3.5h-17.5z M48.75,59.5h10.5v3.5h-10.5z M52.25,63h3.5v3.5h-3.5z" />
+        <path android:fillColor="#FFB3B5" android:pathData="M45.25,49h3.5v3.5h-3.5z" />
+    </group>
+</vector>
