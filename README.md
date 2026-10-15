@@ -9,6 +9,10 @@
   with a <a href="https://github.com/simonkwng/GBFlash">GBFlash</a> cartridge reader over USB-OTG.
 </p>
 
+<p align="center">
+  <a href="https://www.paypal.com/donate/?hosted_button_id=DLNMU8Z7W4B7S"><img src="https://img.shields.io/badge/Donate-PayPal-00457C?logo=paypal&amp;logoColor=white" alt="Donate with PayPal"></a>
+</p>
+
 The name comes from the CR2025 coin cell inside many cartridges: when it runs out, the save is gone. Coincell copies
 your saves somewhere safe before that happens.
 
@@ -56,6 +60,12 @@ keyPassword=...
 ```
 
 Without that file `./gradlew :app:assembleRelease` produces an unsigned APK, which Android will not install.
+
+## Support
+
+Coincell is free and has no ads or paid features. If you enjoy it, you can
+[leave a tip with PayPal](https://www.paypal.com/donate/?hosted_button_id=DLNMU8Z7W4B7S): any amount helps. The
+same link is under **Settings → Support Coincell** in the app.
 
 ## Licences and credits
 
