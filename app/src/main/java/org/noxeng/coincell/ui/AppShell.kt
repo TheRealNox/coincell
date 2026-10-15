@@ -446,6 +446,9 @@ private fun AppNavHost(
             BackupFlowScreen(
                 onClose = { nav.popBackStack() },
                 onViewInLibrary = { e ->
+                    // As if opened from the Library: back goes to the game, then to the Library.
+                    openTab(Tab.LIBRARY)
+                    nav.navigate(GameRoute(e.gameKey))
                     nav.navigate(BackupRoute(e.gameKey, e.id))
                 },
             )

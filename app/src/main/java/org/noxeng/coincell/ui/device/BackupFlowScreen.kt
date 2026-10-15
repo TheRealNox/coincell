@@ -28,7 +28,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +48,7 @@ import org.noxeng.coincell.device.BackupUi
 import org.noxeng.coincell.device.ConnectionStatus
 import org.noxeng.coincell.library.BackupEntry
 import org.noxeng.coincell.library.LibraryStore
+import org.noxeng.coincell.ui.CloseWhenGone
 import org.noxeng.coincell.ui.LocalShell
 import org.noxeng.coincell.ui.ScreenFrame
 import org.noxeng.coincell.ui.components.BackupChips
@@ -86,9 +86,7 @@ fun BackupFlowScreen(
     val backup = state.backup
     val running = backup is BackupUi.Running
     // Nothing to show: the RTC question was dismissed or the flow was left.
-    LaunchedEffect(backup == null && state.rtcPrompt == null) {
-        if (backup == null && state.rtcPrompt == null) onClose()
-    }
+    CloseWhenGone(backup == null && state.rtcPrompt == null, onClose)
     val close = { device.closeBackup(); onClose() }
     BackHandler(enabled = running) { /* Cancel is the explicit button; back never hides a running operation. */ }
     BackHandler(enabled = !running) { close() }

@@ -35,7 +35,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import org.noxeng.coincell.ui.ScreenFrame
 import androidx.compose.material3.RadioButton
@@ -72,6 +71,7 @@ import org.noxeng.coincell.device.RestoreUi
 import org.noxeng.coincell.library.BackupEntry
 import org.noxeng.coincell.library.BackupKind
 import org.noxeng.coincell.library.LibraryState
+import org.noxeng.coincell.ui.CloseWhenGone
 import org.noxeng.coincell.ui.LocalShell
 import org.noxeng.coincell.ui.library.rememberLinkToCartridge
 import org.noxeng.coincell.restore.RestoreMatch
@@ -93,7 +93,7 @@ fun RestoreScreen(device: DeviceController, onClose: () -> Unit) {
     val state by device.state.collectAsState()
     val ui = state.restore
     // The flow ended (closed, or the reader went away): leave the screen.
-    LaunchedEffect(ui == null) { if (ui == null) onClose() }
+    CloseWhenGone(ui == null, onClose)
     ScreenFrame(
         title = "Restore to cartridge",
         statusBar = false,

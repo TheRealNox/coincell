@@ -38,7 +38,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +58,7 @@ import org.noxeng.coincell.library.BackupKind
 import org.noxeng.coincell.library.GameInfo
 import org.noxeng.coincell.library.GameSummary
 import org.noxeng.coincell.library.LibraryStore
+import org.noxeng.coincell.ui.CloseWhenGone
 import org.noxeng.coincell.ui.LocalShell
 import org.noxeng.coincell.ui.ScreenFrame
 import org.noxeng.coincell.ui.components.BackupChips
@@ -94,7 +94,7 @@ fun GameDetailScreen(
     val device by shell.device.state.collectAsState()
     val game = ui.game
     // The last backup was deleted (or the game never existed): nothing left to show.
-    LaunchedEffect(game == null && !ui.loading) { if (game == null && !ui.loading) onBack() }
+    CloseWhenGone(game == null && !ui.loading, onBack)
     val actions = rememberBackupActions(game)
     val rename = rememberRenameGame()
     val importFile = rememberImportIntoGame(game)
@@ -294,7 +294,7 @@ fun BackupDetailScreen(
     val shell = LocalShell.current
     val scope = rememberCoroutineScope()
     val entry = ui.entry
-    LaunchedEffect(entry == null && !ui.loading) { if (entry == null && !ui.loading) onBack() }
+    CloseWhenGone(entry == null && !ui.loading, onBack)
     val actions = rememberBackupActions(ui.game, onDeleted = {})
     var editNote by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }

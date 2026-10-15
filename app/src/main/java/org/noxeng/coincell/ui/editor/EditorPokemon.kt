@@ -34,7 +34,6 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +59,7 @@ import org.noxeng.coincell.pkcore.PokemonSummary
 import org.noxeng.coincell.pkcore.SlotRef
 import org.noxeng.coincell.pkcore.gb.GbPokemon
 import org.noxeng.coincell.sprites.SpriteRules
+import org.noxeng.coincell.ui.CloseWhenGone
 import org.noxeng.coincell.ui.LocalShell
 import org.noxeng.coincell.ui.components.NeutralChip
 import org.noxeng.coincell.ui.components.SectionHeader
@@ -81,7 +81,7 @@ fun EditorPokemonScreen(vm: EditorViewModel, actions: EditorActions, slot: SlotR
     val p = snapshot.pokemonAt(slot)
     // The Pokemon is gone (removed, moved, or the changes were reverted): nothing to show here.
     if (p == null) {
-        LaunchedEffect(Unit) { onBack() }
+        CloseWhenGone(true, onBack)
         return
     }
     val tabs = remember(model) { if (model.generation == 2) PokemonTab.entries else PokemonTab.entries - PokemonTab.MET }

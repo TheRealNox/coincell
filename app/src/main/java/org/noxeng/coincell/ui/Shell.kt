@@ -1,5 +1,9 @@
 package org.noxeng.coincell.ui
 
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.RowScope
@@ -82,6 +86,19 @@ class Shell(
 }
 
 val LocalShell = staticCompositionLocalOf<Shell> { error("No Shell provided") }
+
+/**
+ * Closes the screen once [gone] (what it shows no longer exists, or its flow ended), but only while the screen is the
+ * resumed one on top. A screen that is animating out, or covered by another, is not resumed: if it called [close]
+ * then, the back navigation would close the screen above it instead (the page just opened by "View in library", or
+ * the cartridge's game opened after linking). It closes itself when it is back on top.
+ */
+@Composable
+fun CloseWhenGone(gone: Boolean, close: () -> Unit) {
+    val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val resumed = lifecycle.isAtLeast(Lifecycle.State.RESUMED)
+    LaunchedEffect(gone, resumed) { if (gone && resumed) close() }
+}
 
 /**
  * Standard screen: top app bar, optionally the Device Status Bar under it, then the content. The outer

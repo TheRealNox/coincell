@@ -30,6 +30,16 @@ your saves somewhere safe before that happens.
 - **Private by design**: no internet permission, no account, no analytics. Your saves never leave the phone unless
   you export them.
 
+## Disclaimer
+
+**Use Coincell at your own risk.** It is provided as is, without any warranty (see sections 15 and 16 of the
+[GPL-3.0](LICENSE)). Reading or writing a cartridge can go wrong, for example with dirty contacts, a weak battery or a
+loose cable, and a save or a cartridge can be damaged or lost. The authors are not responsible for any loss of or
+damage to your saves, cartridges, reader or phone.
+
+**Always keep a copy of your saves outside the app**: export them (Export .sav) to a computer or cloud storage. The
+library lives in the app's private storage and is deleted if the app is uninstalled or its data is cleared.
+
 ## Requirements
 
 - Android 8.0 or later with USB-OTG (developed and tested on a Pixel 8 Pro).

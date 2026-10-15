@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.noxeng.coincell.cart.AgbHeader
@@ -366,6 +367,21 @@ fun AboutScreen(versionName: String, onBack: () -> Unit, onFirmware: () -> Unit)
                 KeyValueRow("Reader firmware", "${fw.versionString}, PCB ${fw.pcbLabel}")
                 TextButton(onClick = onFirmware, Modifier.heightIn(min = 48.dp)) { Text("Firmware details") }
             }
+            HorizontalDivider()
+            SectionHeader("Disclaimer")
+            Text(
+                "Use Coincell at your own risk. It is provided as is, without any warranty (GPL-3.0, sections 15 and 16). " +
+                    "Reading or writing a cartridge can go wrong, for example with dirty contacts, a weak battery or a loose " +
+                    "cable, and a save or a cartridge can be damaged or lost. The authors are not responsible for any loss of or " +
+                    "damage to your saves, cartridges, reader or phone.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                "Always keep a copy of your saves outside the app: export them (Export .sav) to a computer or cloud storage. " +
+                    "The library lives in the app's private storage and is deleted if the app is uninstalled or its data is cleared.",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+            )
             HorizontalDivider()
             SectionHeader("Support")
             SupportRow()
