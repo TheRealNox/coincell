@@ -267,6 +267,7 @@ fun EditorBoxesScreen(
                 addAt = null
                 vm.addPokemon(slot, e.id) { placed -> onOpenPokemon(placed) }?.let(shell::message)
             },
+            leading = { e -> PickerSprite(e) },
         )
     }
 }

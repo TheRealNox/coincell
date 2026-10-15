@@ -25,8 +25,9 @@ your saves somewhere safe before that happens.
 - **Save library** on the phone, grouped by game, browsable without the reader. Export any backup as a `.sav`.
 - **Import `.sav` files** from the Android file picker (from PKHeX, an emulator or FlashGBX), with or without the
   cartridge, and link them to their cartridge later.
-- **Pokémon editor for Generations 1 and 2** (Red, Blue, Yellow, Gold, Silver, Crystal): party, boxes, bag, trainer,
-  stats, moves and met data. Edits are always saved as a new backup; the editor never writes to a cartridge.
+- **Pokémon editor for Generations 1 to 3** (Red, Blue, Yellow, Gold, Silver, Crystal, Ruby, Sapphire, Emerald,
+  FireRed, LeafGreen): party, boxes, bag, trainer, stats, moves and met data, plus nature, ability, IVs/EVs and ball
+  in Generation 3. Edits are always saved as a new backup; the editor never writes to a cartridge.
 - **Private by design**: no internet permission, no account, no analytics. Your saves never leave the phone unless
   you export them.
 
@@ -99,7 +100,7 @@ built on the work of others:
 | Project | Used for | Licence |
 |---|---|---|
 | [FlashGBX](https://github.com/lesserkuma/FlashGBX) by Lesserkuma | The cartridge protocol, header parsing, save backup and restore logic (ported to Kotlin), and reduced copies of its `db_DMG.json` / `db_AGB.json` game databases (`app/src/main/assets/db_*.tsv`) | GPL-3.0 |
-| [PKHeX](https://github.com/kwsch/PKHeX) by Kurt and contributors | The Generation 1 / 2 save-editing core in [`:pkcore`](pkcore/README.md) (ported to Kotlin from commit `641c26b`) and its data: base stats, species, move, item and location names | GPL-3.0 |
+| [PKHeX](https://github.com/kwsch/PKHeX) by Kurt and contributors | The Generation 1-3 save-editing core in [`:pkcore`](pkcore/README.md) (ported to Kotlin from commit `641c26b`) and its data: base stats, species, move, item and location names | GPL-3.0 |
 | [usb-serial-for-android](https://github.com/mik3y/usb-serial-for-android) by Mike Wakerly and contributors | USB serial access to the reader's CH340 chip. `LenientCh34xSerialDriver` is a modified copy of its `Ch34xSerialDriver` (3.11.0) | MIT |
 | [AndroidX](https://developer.android.com/jetpack/androidx) and [Jetpack Compose](https://developer.android.com/compose) | User interface and Android integration | Apache-2.0 |
 | [Kotlin](https://kotlinlang.org/), [kotlinx.coroutines](https://github.com/Kotlin/kotlinx.coroutines), [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) | Language and libraries | Apache-2.0 |

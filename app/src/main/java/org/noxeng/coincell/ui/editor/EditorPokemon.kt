@@ -278,8 +278,9 @@ private fun SummaryTab(p: PokemonSummary, model: SaveEditor, slot: SlotRef, appl
     }
 }
 
+/** Species sprite for a picker row ([PickerEntry.id] is the national number). */
 @Composable
-private fun PickerSprite(e: PickerEntry) {
+internal fun PickerSprite(e: PickerEntry) {
     SpriteKeyView(
         org.noxeng.coincell.sprites.PokemonSpriteKey(e.id, shiny = false, form = 0, female = false, egg = false),
         name = e.primary,
