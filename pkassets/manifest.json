@@ -1,7 +1,7 @@
 {
 "schema": 2,
 "assetRoot": "src/main/assets",
-"note": "Paths are relative to src/main/assets (= Android asset paths). Images are NOT GPL-3.0; private use only, delete before distribution. See README.md.",
+"note": "Paths are relative to src/main/assets (= Android asset paths). Images are NOT GPL-3.0: game artwork owned by Nintendo, Creatures Inc., GAME FREAK inc. and The Pokemon Company. See README.md.",
 "source": {"repo":"https://github.com/msikma/pokesprite","commit":"c5aaa610ff2acdf7fd8e2dccd181bca8be9fcb3e","commitDate":"2022-07-22","licenseOfRepoCodeAndData":"MIT"},
 "pkhexDataOnly": {"repo":"https://github.com/kwsch/PKHeX","commit":"641c26ba100225f3605e5a44b61b3b16e15a3774","commitDate":"2026-10-13","usedFor":"item id conversion tables, Ball enum, item id cross-check (no images)"},
 "generated": "2026-10-14",

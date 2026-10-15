@@ -331,8 +331,8 @@ private fun Capability(label: String, on: Boolean) {
 
 private const val MIT_TEXT = """MIT License
 
-Copyright (c) 2011-2013 Google Inc.
-Copyright (c) 2013 Mike Wakerly
+usb-serial-for-android: Copyright (c) 2011-2013 Google Inc., Copyright (c) 2013 Mike Wakerly
+pokesprite: Michiel Sikma and contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
@@ -382,9 +382,15 @@ fun AboutScreen(versionName: String, onBack: () -> Unit, onFirmware: () -> Unit)
                     "https://github.com/lesserkuma/FlashGBX",
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Text("GBA cartridge database (GPL-3.0)", style = MaterialTheme.typography.titleSmall)
+            Text("FlashGBX game databases (GPL-3.0)", style = MaterialTheme.typography.titleSmall)
             Text(
                 "The GBA save type lookup and the default game names use reduced copies of FlashGBX's db_AGB.json and db_DMG.json (config/), (c) Lesserkuma and the FlashGBX contributors, GPL-3.0.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text("PKHeX by Kurt and contributors (GPL-3.0)", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "The Pokemon editor's save core is ported from PKHeX (commit 641c26b), with its base stats and its species, move, " +
+                    "item and location names. https://github.com/kwsch/PKHeX",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text("usb-serial-for-android by Mike Wakerly and contributors (MIT)", style = MaterialTheme.typography.titleSmall)
@@ -393,12 +399,20 @@ fun AboutScreen(versionName: String, onBack: () -> Unit, onFirmware: () -> Unit)
                     "Ch34xSerialDriver (3.11.0). https://github.com/mik3y/usb-serial-for-android",
                 style = MaterialTheme.typography.bodyMedium,
             )
+            Text("pokesprite by Michiel Sikma and contributors (MIT)", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "The editor's sprite index is built from pokesprite's data. The MIT licence covers that code and data only: the " +
+                    "sprite images are Nintendo, Creatures Inc., GAME FREAK inc. and The Pokemon Company artwork. " +
+                    "https://github.com/msikma/pokesprite",
+                style = MaterialTheme.typography.bodyMedium,
+            )
             OutlinedButton(onClick = { showMit = !showMit }, Modifier.heightIn(min = 48.dp)) { Text(if (showMit) "Hide MIT licence" else "Show MIT licence") }
             if (showMit) SelectionContainer { Text(MIT_TEXT, style = MaterialTheme.typography.bodySmall) }
-            Text("Also used: AndroidX, Jetpack Compose and Kotlin (Apache License 2.0).", style = MaterialTheme.typography.bodyMedium)
+            Text("Also used: AndroidX, Jetpack Compose, Kotlin, kotlinx.coroutines and kotlinx.serialization (Apache License 2.0).", style = MaterialTheme.typography.bodyMedium)
             HorizontalDivider()
             Text(
-                "Pokemon and Game Boy are trademarks of their owners. Coincell is not affiliated with or endorsed by them, or by the makers of the GBFlash reader.",
+                "Nintendo, Game Boy, Game Boy Color and Game Boy Advance are trademarks of Nintendo. Pokemon is a trademark of Nintendo, Creatures Inc. and GAME FREAK inc. " +
+                    "Coincell is not affiliated with or endorsed by them, The Pokemon Company, or the makers of the GBFlash reader.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

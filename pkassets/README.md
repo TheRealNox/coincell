@@ -1,4 +1,4 @@
-# pkassets - sprite pack from pokesprite (private use only)
+# pkassets - sprite pack from pokesprite
 
 ## Rights notice - read first
 
@@ -6,15 +6,11 @@ The images in this directory come from the **msikma/pokesprite** repository
 (<https://github.com/msikma/pokesprite>, commit `c5aaa610ff2acdf7fd8e2dccd181bca8be9fcb3e`, 2022-07-22) and were copied
 **unmodified**. They depict Pokemon, items, ribbons and other game artwork owned by
 **Nintendo, Creatures Inc., GAME FREAK inc. and The Pokemon Company**. They are
-**not** covered by the GPL-3.0 licence of the GBFlash app.
+**not** covered by the GPL-3.0 licence of Coincell, nor by pokesprite's MIT licence.
 
-* They are included for **private, personal use only**.
-* **This whole directory must be deleted before any public distribution** (public
-  repository, release APK/AAB, Play Store, ...).
-* Nothing outside `pkassets/` may hard-depend on these files. The app must treat every
-  lookup as optional and fall back to text (names) when the pack or a single file is absent.
-  Removal: delete `pkassets/` (and the one line that includes it in the Gradle settings, if
-  one was added).
+* The pack is optional. Nothing outside `pkassets/` may hard-depend on these files: the app treats every
+  lookup as optional and falls back to text (names) when the pack or a single file is absent.
+  Building without it: delete `pkassets/`; the Gradle build only wires it in when the directory exists.
 
 ### pokesprite licence (MIT, for its code and data) and attribution
 
