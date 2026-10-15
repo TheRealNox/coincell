@@ -53,6 +53,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
@@ -65,6 +69,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import org.noxeng.coincell.GbfApp
 import org.noxeng.coincell.editor.PickerEntry
@@ -365,7 +370,7 @@ fun PickerSheet(
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 placeholder = { Text("Search by name or number") },
             )
-            LazyColumn(Modifier.weight(1f)) {
+            LazyColumn(Modifier.weight(1f).nestedScroll(KeepEndOfListInSheet)) {
                 if (noneLabel != null && onNone != null && query.isBlank()) {
                     item(key = "none") {
                         ListItem(
@@ -398,6 +403,19 @@ fun PickerSheet(
         }
     }
     LaunchedEffect(Unit) { focus.requestFocus() }
+}
+
+/**
+ * Swallows what is left of a scroll or fling once the list hits its end (upward leftovers only). Passed on, it made
+ * the Material 3 sheet move up and spring back again and again after a long fling. Downward leftovers still reach the
+ * sheet, so pulling down at the top of the list still closes it.
+ */
+private val KeepEndOfListInSheet = object : NestedScrollConnection {
+    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset =
+        if (available.y < 0f) Offset(0f, available.y) else Offset.Zero
+
+    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity =
+        if (available.y < 0f) Velocity(0f, available.y) else Velocity.Zero
 }
 
 private fun Modifier.clickableRow(onClick: () -> Unit): Modifier = this.then(Modifier.clickable(onClick = onClick))
