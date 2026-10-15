@@ -61,7 +61,7 @@ class DeviceController(
     private val library: SaveLibrary,
     private val scope: CoroutineScope,
     val debugLog: DebugLog = DebugLog(),
-    private val appVersion: String = "?",
+    val appVersion: String = "?",
     /** Called after the library changed on disk (backup, safety copy, import) so the browser reloads. */
     private val onLibraryChanged: () -> Unit = {},
     private val io: CoroutineDispatcher = Dispatchers.IO,
@@ -745,6 +745,18 @@ class DeviceController(
         coordinator ?: RestoreCoordinator(s, library, appVersion, log = debugLog::add).also { coordinator = it }
 
     // ---- import (milestone 3) ------------------------------------------------------------------
+
+    /**
+     * The cartridge a game imported from a file can be linked to: its library identity and save size, or null when no
+     * cartridge is read, powered and ready (nothing else running).
+     */
+    fun linkTarget(): Pair<GameInfo, Int>? {
+        val st = _state.value
+        val cart = st.cartGame ?: return null
+        if (st.status != ConnectionStatus.CONNECTED || !st.cartPowered || st.busy || st.restore != null || !st.backupAvailable) return null
+        val size = if (st.platform == CartPlatform.GBA) (agbPlan as? AgbBackupPlan.Ready)?.saveSize else (plan as? BackupPlan.Ready)?.saveSize
+        return size?.let { cart to it }
+    }
 
     /** The largest file the import may read for the inserted cartridge, or null if no cartridge is ready. */
     fun importLimit(): Int? {

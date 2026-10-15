@@ -73,4 +73,37 @@ object SaveImport {
             )
         }
     }
+
+    /** GB / GBC cartridge save sizes: MBC2 (512 nibbles), 2, 8, 32, 64 and 128 KiB. */
+    val DMG_SIZES: List<Int> = listOf(512, 0x800, 0x2000, 0x8000, 0x10000, 0x20000)
+
+    /** GBA save sizes: 4K / 64K EEPROM, 256K SRAM, 512K and 1M Flash (or unlicensed SRAM of those sizes). */
+    val AGB_SIZES: List<Int> = listOf(512, 0x2000, 0x8000, 0x10000, 0x20000)
+
+    /** The largest file worth reading when there is no cartridge to say what to expect. */
+    val MAX_LOOSE_FILE: Int = 0x20000 + RtcSnapshot.FOOTER_SIZE
+
+    /**
+     * A `.sav` imported without its cartridge: the save size is whichever supported size [bytes] has, optionally
+     * followed by the platform's clock footer (48 bytes GB / GBC, 16 GBA). [gba] picks the platform.
+     */
+    fun parseLoose(bytes: ByteArray, gba: Boolean): Result {
+        val n = bytes.size
+        val sizes = if (gba) AGB_SIZES else DMG_SIZES
+        val footer = if (gba) AgbRtcSnapshot.FOOTER_SIZE else RtcSnapshot.FOOTER_SIZE
+        return when {
+            n == 0 -> Result.Rejected("The file is empty.")
+            n in sizes -> Result.Ok(bytes, null)
+            (n - footer) in sizes -> Result.Ok(bytes.copyOf(n - footer), bytes.copyOfRange(n - footer, n))
+            !gba && (n - BGB_FOOTER) in sizes -> Result.Rejected(
+                "The file is $n bytes: a ${n - BGB_FOOTER} byte save plus a $BGB_FOOTER byte footer. That looks like BGB's clock format, " +
+                    "which is not supported. Save without the clock footer (or with a ${RtcSnapshot.FOOTER_SIZE} byte one).",
+            )
+            else -> Result.Rejected(
+                "The file is $n bytes, which is not a ${if (gba) "GBA" else "GB / GBC"} save size (" +
+                    sizes.joinToString { if (it >= 1024) "${it / 1024} KiB" else "$it bytes" } +
+                    ", optionally followed by a $footer byte clock footer).",
+            )
+        }
+    }
 }

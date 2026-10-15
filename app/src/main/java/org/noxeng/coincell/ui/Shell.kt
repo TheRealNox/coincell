@@ -47,6 +47,14 @@ class Shell(
         scope.launch { snackbar.showSnackbar(text) }
     }
 
+    /**
+     * Runs [block] in the app-wide scope: for work that removes the screen that started it (linking an imported game
+     * makes that game disappear), so the screen leaving does not cancel the work or its follow-up.
+     */
+    fun launch(block: suspend () -> Unit) {
+        scope.launch { block() }
+    }
+
     /** Delete with Undo: the backup disappears at once, the files go when the snackbar expires (8 s). */
     fun deleteBackup(entry: BackupEntry) {
         scope.launch {

@@ -2,7 +2,6 @@ package org.noxeng.coincell.ui.device
 
 import android.content.Intent
 import android.net.Uri
-import android.provider.OpenableColumns
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -69,6 +68,8 @@ import org.noxeng.coincell.library.LibraryState
 import org.noxeng.coincell.library.LibraryStore
 import org.noxeng.coincell.protocol.CartPlatform
 import org.noxeng.coincell.ui.LocalShell
+import org.noxeng.coincell.ui.components.displayName
+import org.noxeng.coincell.ui.components.readLimited
 import org.noxeng.coincell.ui.ScreenFrame
 import org.noxeng.coincell.ui.components.CartridgeGlyph
 import org.noxeng.coincell.ui.components.KeyValueRow
@@ -86,7 +87,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import java.io.IOException
 
 /** Device tab: what the library knows about the cartridge in the reader. */
 class DeviceScreenViewModel(store: LibraryStore, deviceState: StateFlow<DeviceState>) : ViewModel() {
@@ -405,34 +405,6 @@ private fun ReaderCard(state: DeviceState, onDisconnect: () -> Unit, onDetails: 
                 TextButton(onClick = onDetails, Modifier.heightIn(min = 48.dp)) { Text("Details") }
             }
         }
-    }
-}
-
-// ---- file helpers for the .sav import ------------------------------------------------------------
-
-private fun displayName(context: android.content.Context, uri: Uri): String {
-    val fromProvider = try {
-        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
-            if (it.moveToFirst()) it.getString(0) else null
-        }
-    } catch (_: Exception) {
-        null
-    }
-    return fromProvider ?: (uri.lastPathSegment ?: "file.sav")
-}
-
-/** Reads at most [limit] + 1 bytes, so an oversized file is detected without loading all of it. */
-private fun readLimited(context: android.content.Context, uri: Uri, limit: Int): ByteArray {
-    val input = context.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open the chosen file")
-    return input.use {
-        val out = java.io.ByteArrayOutputStream()
-        val buf = ByteArray(8192)
-        while (out.size() <= limit) {
-            val n = it.read(buf, 0, minOf(buf.size, limit + 1 - out.size()))
-            if (n < 0) break
-            out.write(buf, 0, n)
-        }
-        out.toByteArray()
     }
 }
 

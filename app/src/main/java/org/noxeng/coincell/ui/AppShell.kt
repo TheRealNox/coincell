@@ -423,6 +423,7 @@ private fun AppNavHost(
                     nav.navigate(BackupFlowRoute) { launchSingleTop = true }
                 },
                 onGoDevice = { openTab(Tab.DEVICE) },
+                onOpenGame = { key -> nav.navigate(GameRoute(key)) { popUpTo<GameRoute> { inclusive = true } } },
             )
         }
         composable<BackupRoute> { entry ->

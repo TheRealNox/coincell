@@ -73,6 +73,7 @@ import org.noxeng.coincell.library.BackupEntry
 import org.noxeng.coincell.library.BackupKind
 import org.noxeng.coincell.library.LibraryState
 import org.noxeng.coincell.ui.LocalShell
+import org.noxeng.coincell.ui.library.rememberLinkToCartridge
 import org.noxeng.coincell.restore.RestoreMatch
 import org.noxeng.coincell.restore.RestorePolicy
 import org.noxeng.coincell.restore.RestoreResult
@@ -520,6 +521,7 @@ private fun DoneStep(ui: RestoreUi.Done, state: DeviceState, vm: DeviceControlle
         SafetyPointer(r)
     }
     r.warnings.forEach { Text("Note: $it") }
+    if (ok) LinkImportedGame(ui, state)
     if (!ok && r.wroteData) {
         Text("What to do: keep the reader connected, read the header again, and restore the safety copy below. Likely causes: dirty contacts, weak battery, a loose cartridge.", style = MaterialTheme.typography.bodySmall)
     }
@@ -538,6 +540,28 @@ private fun DoneStep(ui: RestoreUi.Done, state: DeviceState, vm: DeviceControlle
         }
     }
     if (ok) Text("\"Undo restore\" writes the previous save back through the same steps (review, safety check, hold to confirm, write, verify).", style = MaterialTheme.typography.bodySmall)
+}
+
+/**
+ * After a verified restore from a game imported from a file: offer to link that game to this cartridge, so its
+ * backups join the cartridge's. Asked, never done silently: the user may have restored onto another game on purpose.
+ */
+@Composable
+private fun LinkImportedGame(ui: RestoreUi.Done, state: DeviceState) {
+    val shell = LocalShell.current
+    val review = ui.request.review
+    val fileGame = review.sourceGame?.takeIf { it.isFromFile } ?: return
+    val library by shell.store.state.collectAsState()
+    val summary = (library as? LibraryState.Loaded)?.games?.firstOrNull { it.key == fileGame.key } ?: return
+    val target = remember(state) { shell.device.linkTarget() }?.takeIf { (cart, _) -> cart.key == review.cartGame.key } ?: return
+    val link = rememberLinkToCartridge(onLinked = {})
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Link the imported game?", style = MaterialTheme.typography.titleMedium)
+            Text("${summary.title} was imported from a file. Link it to ${target.first.label} to keep its backups with this cartridge's.")
+            OutlinedButton(onClick = { link(summary, target.first, target.second) }) { Text("Link to ${target.first.label}") }
+        }
+    }
 }
 
 @Composable

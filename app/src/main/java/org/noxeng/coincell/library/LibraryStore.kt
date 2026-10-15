@@ -2,6 +2,8 @@ package org.noxeng.coincell.library
 
 import org.noxeng.coincell.editor.PokemonSaveKind
 import org.noxeng.coincell.editor.PokemonSaveProbe
+import org.noxeng.coincell.save.SaveCheck
+import org.noxeng.coincell.save.SaveImport
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +17,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.IOException
 
 /**
  * App-wide, offline view of the [SaveLibrary]: the list of games for every screen, soft delete (hide now,
@@ -125,6 +128,71 @@ class LibraryStore(
         val stored = withContext(io) { library.storeEdited(parent, save, note.trim().take(NOTE_MAX_LENGTH), appVersion) }
         reload()
         return stored
+    }
+
+    /**
+     * Imports [bytes] (the file [fileName]) as the first backup of a new game made from a file, on [platform], named
+     * [name]. Throws [IOException] with a message for the user when the file is not a save of that platform.
+     */
+    suspend fun importNewGame(platform: DisplayPlatform, name: String, fileName: String, bytes: ByteArray, appVersion: String): BackupEntry {
+        val gba = platform == DisplayPlatform.GBA
+        val r = SaveImport.parseLoose(bytes, gba)
+        if (r is SaveImport.Result.Rejected) throw IOException(r.reason)
+        r as SaveImport.Result.Ok
+        val stored = withContext(io) {
+            library.storeInNewFileGame(platform, name, importedBackup(r, fileName, appVersion, rtcDeclared = !gba && r.rtcFooter != null))
+        }
+        reload()
+        return stored
+    }
+
+    /**
+     * Imports [bytes] into an existing [game]: the file must be the size of the game's newest backup (plus a clock
+     * footer when the game has a clock; GBA files may always carry FlashGBX's footer). GBA entries keep the save
+     * type of that backup, so a later restore checks it as usual.
+     */
+    suspend fun importIntoGame(game: GameSummary, fileName: String, bytes: ByteArray, appVersion: String): BackupEntry {
+        val newest = game.backups.first()
+        val gba = game.game.platform == "AGB"
+        val clock = !gba && game.backups.any { it.rtcDeclared || it.rtcIncluded }
+        val r = if (gba) SaveImport.parseAgb(bytes, newest.size) else SaveImport.parse(bytes, newest.size, clockCart = clock)
+        if (r is SaveImport.Result.Rejected) throw IOException(r.reason)
+        r as SaveImport.Result.Ok
+        val typed = game.backups.firstOrNull { it.saveType != null }
+        val backup = importedBackup(r, fileName, appVersion, rtcDeclared = clock, saveType = typed?.saveType, saveTypeSource = typed?.saveTypeSource)
+        val stored = withContext(io) { library.store(game.game, backup) }
+        reload()
+        return stored
+    }
+
+    private fun importedBackup(
+        r: SaveImport.Result.Ok,
+        fileName: String,
+        appVersion: String,
+        rtcDeclared: Boolean,
+        saveType: Int? = null,
+        saveTypeSource: org.noxeng.coincell.cart.SaveTypeSource? = null,
+    ) = NewBackup(
+        save = r.save,
+        rtcFooter = r.rtcFooter,
+        rtcProbePresent = null,
+        rtcDeclared = rtcDeclared,
+        firmware = "",
+        appVersion = appVersion,
+        verified = false,
+        suspectReason = SaveCheck.suspectReason(r.save),
+        note = "Imported from $fileName",
+        kind = BackupKind.IMPORTED,
+        originalFileName = fileName,
+        saveType = saveType,
+        saveTypeSource = saveTypeSource,
+    )
+
+    /** Moves the backups of the game made from a file [fileGameKey] into [cart]'s game; see [SaveLibrary.linkToCartridge]. */
+    suspend fun linkToCartridge(fileGameKey: String, cart: GameInfo, cartSaveSize: Int): GameInfo {
+        val linked = withContext(io) { library.linkToCartridge(fileGameKey, cart, cartSaveSize) }
+        reload()
+        return linked
     }
 
     /** The raw `.sav` of [entry] (CRC checked). */

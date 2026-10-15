@@ -25,7 +25,16 @@ data class GameInfo(
     val displayName: String? = null,
     /** The FlashGBX database name (GB/GBC or GBA) seen when a backup was stored (`databaseName` in `game.json`), also usable offline. */
     val databaseName: String? = null,
+    /**
+     * Set for a game created by importing a `.sav` without its cartridge (`importedPlatform` in `game.json`): the
+     * platform the user picked. Such a game has no header identity (checksums are 0, [title] is the name the user
+     * gave) until it is linked to a cartridge, which moves its backups into that cartridge's game.
+     */
+    val importedPlatform: DisplayPlatform? = null,
 ) {
+    /** Created from a file and not linked to a cartridge yet. */
+    val isFromFile: Boolean get() = importedPlatform != null
+
     /** The label without a custom name: the FlashGBX database name when known, otherwise the header title. */
     val defaultLabel: String
         get() = databaseName?.trim()?.ifEmpty { null } ?: title.ifBlank { "(untitled)" }
@@ -38,7 +47,9 @@ data class GameInfo(
 
     /** What identifies the cartridge besides the title: global checksum for GB / GBC, game code + header checksum for GBA. */
     val identityText: String
-        get() = if (platform == "AGB") {
+        get() = if (isFromFile) {
+            "Imported from a file, not linked to a cartridge"
+        } else if (platform == "AGB") {
             (gameCode?.let { "Game code $it  ·  " } ?: "") + "Header checksum 0x%02X".format(headerChecksum and 0xFF)
         } else {
             "Checksum 0x%04X".format(globalChecksum and 0xFFFF)
@@ -67,6 +78,26 @@ data class GameInfo(
         fun sanitizeTitle(title: String): String {
             val s = title.uppercase().replace(Regex("[^A-Z0-9]+"), "-").trim('-').take(MAX_TITLE_IN_KEY).trim('-')
             return s.ifEmpty { "UNTITLED" }
+        }
+
+        /**
+         * A game made from an imported file: `<platform>_<NAME>_FILE-<suffix>`. The `FILE-` part can never appear in
+         * a cartridge key (those end in hex checksums), so the two kinds never collide.
+         */
+        fun fromFile(platform: DisplayPlatform, name: String, suffix: String): GameInfo {
+            val p = if (platform == DisplayPlatform.GBA) "AGB" else "DMG"
+            val title = normalizeName(name) ?: "Imported save"
+            return GameInfo(
+                platform = p,
+                title = title,
+                key = "${p}_${sanitizeTitle(title)}_FILE-${suffix.uppercase().replace(Regex("[^A-Z0-9]"), "")}",
+                cartType = "Imported file",
+                romSize = null,
+                globalChecksum = 0,
+                headerChecksum = 0,
+                gameCode = null,
+                importedPlatform = platform,
+            )
         }
 
         fun makeKey(platform: String, title: String, checksum: Int): String =

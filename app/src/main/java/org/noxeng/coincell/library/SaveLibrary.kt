@@ -164,6 +164,92 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
         )
     }
 
+    /**
+     * Stores [backup] (an imported file) as the first entry of a NEW game made from a file ([GameInfo.fromFile]),
+     * named [name], on [platform]. Returns the stored entry; its [BackupEntry.gameKey] is the new game.
+     */
+    @Synchronized
+    fun storeInNewFileGame(platform: DisplayPlatform, name: String, backup: NewBackup): BackupEntry {
+        var stamp = nowMillis()
+        var game = GameInfo.fromFile(platform, name, java.lang.Long.toString(stamp, 36))
+        while (File(root, game.key).exists()) game = GameInfo.fromFile(platform, name, java.lang.Long.toString(++stamp, 36))
+        return store(game, backup)
+    }
+
+    /**
+     * Links the game made from a file [fileGameKey] to the cartridge [cart] (whose save is [cartSaveSize] bytes): every
+     * backup folder moves into [cart]'s game (created if needed), ids that already exist there get a `-2`, `-3`...
+     * suffix (and `parentId` links follow), the restore records are appended to the cartridge's, and the file game's
+     * folder is removed. A custom name given to the file game is kept when the cartridge's game has none.
+     *
+     * Refused (nothing moved) when the platforms differ or a backup's size is not the cartridge's save size. Each
+     * backup moves with one atomic rename, so an interruption leaves two valid games, never a broken backup.
+     */
+    @Synchronized
+    fun linkToCartridge(fileGameKey: String, cart: GameInfo, cartSaveSize: Int): GameInfo {
+        require(SAFE.matches(fileGameKey) && SAFE.matches(cart.key)) { "Unsafe game key" }
+        val fileGame = readGame(fileGameKey) ?: throw IOException("The imported game is missing from the library")
+        if (!fileGame.isFromFile) throw IOException("${fileGame.label} is already a cartridge's game")
+        if (cart.isFromFile) throw IOException("The target is not a cartridge")
+        if (fileGame.platform != cart.platform) {
+            throw IOException("${fileGame.label} is a ${if (fileGame.platform == "AGB") "GBA" else "GB / GBC"} save; the cartridge is not.")
+        }
+        val entries = list(fileGameKey)
+        entries.firstOrNull { it.size != cartSaveSize }?.let {
+            throw IOException("A backup of ${fileGame.label} is ${it.size} bytes but this cartridge's save is $cartSaveSize bytes, so they do not belong together.")
+        }
+        val now = nowMillis()
+        val fileDir = File(root, fileGameKey)
+        val cartDir = File(root, cart.key)
+        if (!cartDir.isDirectory && !cartDir.mkdirs()) throw IOException("Cannot create $cartDir")
+        removeStaleTemps(cartDir)
+        writeGameJson(cartDir, cart, now)
+        if (readGame(cart.key)?.displayName == null) fileGame.displayName?.let { setDisplayName(cart.key, it) }
+
+        // Move every backup folder (also unreadable ones: they are the user's data), oldest first.
+        val ids = HashMap<String, String>()
+        val dirs = (fileDir.listFiles { f -> f.isDirectory && !f.name.startsWith(".") } ?: emptyArray()).sortedBy { it.name }
+        for (dir in dirs) {
+            var id = dir.name
+            var n = 2
+            while (File(cartDir, id).exists()) id = "${dir.name}-${n++}"
+            if (id != dir.name) {
+                // The id is stored inside backup.json too: rewrite it before the folder becomes visible under its new name.
+                val json = File(dir, BACKUP_JSON)
+                runCatching { JSONObject(json.readText()).put("id", id) }.getOrNull()?.let { rewriteJson(dir, BACKUP_JSON, it) }
+            }
+            moveAtomic(dir, File(cartDir, id))
+            ids[dir.name] = id
+        }
+        // Edited entries point at their parent by id.
+        for (newId in ids.values) {
+            val dir = File(cartDir, newId)
+            val json = runCatching { JSONObject(File(dir, BACKUP_JSON).readText()) }.getOrNull() ?: continue
+            val parent = json.optString("parentId", "").ifEmpty { null } ?: continue
+            val mapped = ids[parent] ?: continue
+            if (mapped != parent) rewriteJson(dir, BACKUP_JSON, json.put("parentId", mapped))
+        }
+        restoreRecords(fileGameKey).forEach { r ->
+            addRestoreRecord(
+                cart.key,
+                RestoreRecord(r.timestampMillis, ids[r.sourceBackupId] ?: r.sourceBackupId, r.safetyCopyId?.let { ids[it] ?: it }, r.outcome, r.crc32, r.detail),
+            )
+        }
+        if (!fileDir.deleteRecursively()) throw IOException("The backups were moved but $fileDir could not be removed")
+        return readGame(cart.key) ?: throw IOException("The cartridge's game cannot be read back")
+    }
+
+    private fun rewriteJson(dir: File, name: String, json: JSONObject) {
+        val tmp = File(dir, "$TEMP_PREFIX$name")
+        try {
+            writeFile(tmp, json.toString(2).toByteArray())
+            moveAtomic(tmp, File(dir, name))
+        } catch (e: Exception) {
+            tmp.delete()
+            throw e
+        }
+    }
+
     /** Backups of [gameKey], newest first. Unreadable entries are skipped. */
     @Synchronized
     fun list(gameKey: String): List<BackupEntry> {
@@ -209,6 +295,7 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
             gameCode = if (j.isNull("gameCode")) null else j.getString("gameCode"),
             displayName = optName(j, "displayName"),
             databaseName = optName(j, "databaseName"),
+            importedPlatform = j.optString("importedPlatform").ifEmpty { null }?.let { name -> DisplayPlatform.entries.firstOrNull { it.name == name } },
         )
     } catch (_: Exception) {
         null
@@ -374,6 +461,7 @@ class SaveLibrary(private val root: File, private val nowMillis: () -> Long = Sy
             .put("lastSeen", now)
         displayName?.let { json.put("displayName", it) }
         databaseName?.let { json.put("databaseName", it) }
+        game.importedPlatform?.let { json.put("importedPlatform", it.name) }
         val tmp = File(gameDir, "$TEMP_PREFIX$GAME_JSON")
         writeFile(tmp, json.toString(2).toByteArray())
         moveAtomic(tmp, file)

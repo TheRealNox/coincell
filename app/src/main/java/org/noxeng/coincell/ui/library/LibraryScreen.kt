@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Search
@@ -82,9 +83,13 @@ fun LibraryScreen(vm: LibraryViewModel, onOpenGame: (String) -> Unit, onGoDevice
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
     val rename = rememberRenameGame()
+    val import = rememberImportNewGame(onImported = onOpenGame)
     ScreenFrame(
         title = "Library",
         actions = {
+            IconButton(onClick = import) {
+                Icon(Icons.Filled.FileOpen, contentDescription = "Import a .sav file")
+            }
             IconButton(onClick = {
                 if (searchOpen) vm.setSearch("")
                 searchOpen = !searchOpen
@@ -144,7 +149,7 @@ fun LibraryScreen(vm: LibraryViewModel, onOpenGame: (String) -> Unit, onGoDevice
                 }
             }
             is LibraryState.Loaded -> when {
-                ui.total == 0 -> EmptyLibrary(onGoDevice)
+                ui.total == 0 -> EmptyLibrary(onGoDevice, import)
                 ui.items.isEmpty() -> NoResults(vm::clearFilters)
                 else -> GameList(ui.items, ui.inReaderKey, onOpenGame, rename)
             }
@@ -168,7 +173,7 @@ private fun LoadingRows() {
 }
 
 @Composable
-private fun EmptyLibrary(onGoDevice: () -> Unit) {
+private fun EmptyLibrary(onGoDevice: () -> Unit, onImport: () -> Unit) {
     Column(
         Modifier.fillMaxSize().padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -177,13 +182,17 @@ private fun EmptyLibrary(onGoDevice: () -> Unit) {
         CartridgeGlyph(DisplayPlatform.GB, size = 96.dp)
         Text("No saves yet", style = MaterialTheme.typography.titleLarge)
         Text(
-            "Back up a cartridge to start your library. Your backups stay on this phone and can be browsed without the reader.",
+            "Back up a cartridge to start your library, or import a .sav file. Your saves stay on this phone and can be browsed without the reader.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Button(onClick = onGoDevice) {
             Icon(Icons.Filled.Usb, contentDescription = null, Modifier.size(18.dp))
             Text("Go to Device", Modifier.padding(start = 8.dp))
+        }
+        OutlinedButton(onClick = onImport) {
+            Icon(Icons.Filled.FileOpen, contentDescription = null, Modifier.size(18.dp))
+            Text("Import a .sav file...", Modifier.padding(start = 8.dp))
         }
     }
 }

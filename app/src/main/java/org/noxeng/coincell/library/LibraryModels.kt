@@ -10,10 +10,12 @@ enum class DisplayPlatform(val label: String) {
 /**
  * GB vs GBC is not stored in `game.json`. A GBC cartridge with the 4 character manufacturer code in its
  * header (every game from 1998 on) has [GameInfo.gameCode] set; older dual-mode titles without a code are
- * shown as GB. The cartridge itself is handled identically by the reader, so nothing depends on this.
+ * shown as GB. The cartridge itself is handled identically by the reader, so nothing depends on this. A game imported
+ * from a file shows the platform the user picked.
  */
 val GameInfo.displayPlatform: DisplayPlatform
     get() = when {
+        importedPlatform != null -> importedPlatform
         platform == "AGB" -> DisplayPlatform.GBA
         gameCode != null -> DisplayPlatform.GBC
         else -> DisplayPlatform.GB

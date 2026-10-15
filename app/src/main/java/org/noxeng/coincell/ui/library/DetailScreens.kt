@@ -18,6 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CatchingPokemon
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Upload
@@ -54,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import org.noxeng.coincell.editor.PokemonSaveKind
 import org.noxeng.coincell.library.BackupEntry
 import org.noxeng.coincell.library.BackupKind
+import org.noxeng.coincell.library.GameInfo
 import org.noxeng.coincell.library.GameSummary
 import org.noxeng.coincell.library.LibraryStore
 import org.noxeng.coincell.ui.LocalShell
@@ -83,6 +86,8 @@ fun GameDetailScreen(
     onRestore: (BackupEntry) -> Unit,
     onBackupCart: () -> Unit,
     onGoDevice: () -> Unit,
+    /** Opens another game's page in place of this one (after linking this imported game to its cartridge). */
+    onOpenGame: (String) -> Unit,
 ) {
     val ui by vm.ui.collectAsState()
     val shell = LocalShell.current
@@ -92,6 +97,10 @@ fun GameDetailScreen(
     LaunchedEffect(game == null && !ui.loading) { if (game == null && !ui.loading) onBack() }
     val actions = rememberBackupActions(game)
     val rename = rememberRenameGame()
+    val importFile = rememberImportIntoGame(game)
+    val link = rememberLinkToCartridge(onLinked = onOpenGame)
+    // Recomputed whenever the device state changes, so it follows the reader.
+    val linkTarget = remember(device) { shell.device.linkTarget() }
     ScreenFrame(
         title = game?.title ?: "Game",
         onBack = onBack,
@@ -107,7 +116,14 @@ fun GameDetailScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item { IdentityCard(game, ui, onBackupCart, onGoDevice) }
+            item {
+                IdentityCard(
+                    game, ui, onBackupCart, onGoDevice,
+                    onImport = importFile,
+                    linkTarget = linkTarget?.takeIf { (cart, _) -> cart.platform == game.game.platform },
+                    onLink = { (cart, size) -> link(game, cart, size) },
+                )
+            }
             item {
                 SectionHeader("History (${game.count})")
                 device.restoreUnavailableReason?.let {
@@ -134,7 +150,16 @@ fun GameDetailScreen(
 }
 
 @Composable
-private fun IdentityCard(game: GameSummary, ui: GameDetailUi, onBackupCart: () -> Unit, onGoDevice: () -> Unit) {
+private fun IdentityCard(
+    game: GameSummary,
+    ui: GameDetailUi,
+    onBackupCart: () -> Unit,
+    onGoDevice: () -> Unit,
+    onImport: () -> Unit,
+    /** The cartridge in the reader this imported game could be linked to (same platform), or null. */
+    linkTarget: Pair<GameInfo, Int>?,
+    onLink: (Pair<GameInfo, Int>) -> Unit,
+) {
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -143,7 +168,7 @@ private fun IdentityCard(game: GameSummary, ui: GameDetailUi, onBackupCart: () -
                     Text(game.title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     HeaderTitleLine(game.game.secondaryTitle)
                     Text(
-                        "${game.game.identityText}  ·  ${game.game.cartType}",
+                        if (game.game.isFromFile) game.game.identityText else "${game.game.identityText}  ·  ${game.game.cartType}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -154,7 +179,9 @@ private fun IdentityCard(game: GameSummary, ui: GameDetailUi, onBackupCart: () -
                 if (game.hasClock) NeutralChip("Clock", Icons.Filled.Schedule)
             }
             PokemonChip(ui.pokemon)
-            if (ui.canBackupCart) {
+            if (game.game.isFromFile) {
+                LinkSection(linkTarget, onLink, onGoDevice)
+            } else if (ui.canBackupCart) {
                 Button(onClick = onBackupCart, Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Icon(Icons.Filled.Download, contentDescription = null, Modifier.size(18.dp))
                     Text("Back up this cart", Modifier.padding(start = 8.dp))
@@ -171,7 +198,30 @@ private fun IdentityCard(game: GameSummary, ui: GameDetailUi, onBackupCart: () -
                 )
                 TextButton(onClick = onGoDevice) { Text("Go to Device") }
             }
+            OutlinedButton(onClick = onImport, Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Icon(Icons.Filled.FileOpen, contentDescription = null, Modifier.size(18.dp))
+                Text("Import a .sav file...", Modifier.padding(start = 8.dp))
+            }
         }
+    }
+}
+
+/** For a game imported from a file: link it to its cartridge once that cartridge is read. */
+@Composable
+private fun LinkSection(linkTarget: Pair<GameInfo, Int>?, onLink: (Pair<GameInfo, Int>) -> Unit, onGoDevice: () -> Unit) {
+    Text(
+        "This game was imported from a file. Link it to its cartridge to keep its backups with that cartridge's: " +
+            "read the cartridge on the Device tab, then link here.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    if (linkTarget != null) {
+        Button(onClick = { onLink(linkTarget) }, Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Icon(Icons.Filled.Link, contentDescription = null, Modifier.size(18.dp))
+            Text("Link to ${linkTarget.first.label}", Modifier.padding(start = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    } else {
+        TextButton(onClick = onGoDevice) { Text("Go to Device") }
     }
 }
 
